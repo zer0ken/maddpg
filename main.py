@@ -47,7 +47,6 @@ if __name__ == '__main__':
 
     for i in range(N_GAMES):
         obs = env.reset()
-        # env.render()
         score = 0
         done = [False]*n_agents
         episode_step = 0
