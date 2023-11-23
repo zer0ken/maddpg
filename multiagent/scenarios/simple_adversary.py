@@ -110,12 +110,7 @@ class Scenario(BaseScenario):
         # Rewarded based on proximity to the goal landmark
         shaped_reward = True
         if shaped_reward:  # distance-based reward
-            # rew = -np.sum(np.square(agent.state.p_pos - agent.goal_a.state.p_pos))
-            # good_agents = self.good_agents(world)
-            # for a in good_agents:
-            #     rew += -np.sum(np.square(agent.state.p_pos - a.state.p_pos))
             return -np.sum(np.square(agent.state.p_pos - agent.goal_a.state.p_pos))
-            # return rew
         else:  # proximity-based reward (binary)
             adv_rew = 0
             if np.sqrt(np.sum(np.square(agent.state.p_pos - agent.goal_a.state.p_pos))) < 2 * agent.goal_a.size:
