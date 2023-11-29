@@ -1,7 +1,7 @@
 import numpy as np
 from maddpg import MADDPG
 from buffer import MultiAgentReplayBuffer
-from make_env import make_env
+# from make_env import make_env
 import time
 
 def obs_list_to_state_vector(observation):
@@ -12,8 +12,8 @@ def obs_list_to_state_vector(observation):
 
 if __name__ == '__main__':
     #scenario = 'simple'
-    scenario = 'simple_adversary'
-    env = make_env(scenario)
+    # scenario = 'simple_adversary'
+    # env = make_env(scenario)
     n_agents = env.n
     actor_dims = []
     for i in range(n_agents):
