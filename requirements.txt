@@ -3,7 +3,6 @@ gym==0.21.0
 importlib-metadata==4.8.3
 numpy==1.19.5
 Pillow==8.4.0
-pygame==2.5.2
 pyglet==1.2.4
 six==1.16.0
 torch==1.4.0
