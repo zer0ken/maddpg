@@ -140,13 +140,11 @@ class GUI(Frame):
         for row in range(self.row_num):
             for col in range(self.col_num):
                 if (row, col) in self.cells:
+                    self.cells[(row, col)].draw()
                     continue
                 cell = Cell(canvas, row, col)
                 self.cells[row, col] = cell
                 self.rect_to_cell[cell.rect] = cell
-        
-        for cell in self.cells.values():
-            cell.draw()
         
         self.canvas = canvas
 
@@ -261,13 +259,17 @@ class GUI(Frame):
         obstacles = []
         dirties = []
         agents = []
-        for cell in self.cells.values():
+        for pos, cell in self.cells.items():
+            if pos[0] >= self.row_num or pos[1] >= self.col_num:
+                continue
             if cell.obstacle:
                 obstacles.append((cell.row, cell.col))
             if cell.dirty:
                 dirties.append((cell.row, cell.col))
-        for agent in self.agents.keys():
-            agents.append(agent)
+        for pos in self.agents.keys():
+            if pos[0] >= self.row_num or pos[1] >= self.col_num:
+                continue
+            agents.append(pos)
         
         print('@@@ Export environment')
         print('* obstacles:', obstacles)
@@ -293,7 +295,7 @@ class Cell:
             right = (self.col + 1) * GUI.CELL_SIZE
             bottom = (self.row + 1) * GUI.CELL_SIZE
             self.rect = self.canvas.create_rectangle(left,top,right,bottom,outline='gray',fill='')
-       
+        
         color = 'white'
         if self.obstacle:
             color = 'black'
