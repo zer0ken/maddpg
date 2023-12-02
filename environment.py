@@ -1,20 +1,40 @@
 import numpy as np
+from gym.spaces import Discrete
 
 class MAACEnv:
     ACTIONS = {0: (-1, 0), 1: (0, 1), 2: (1, 0), 3: (0, -1), 4: (0, 0)}
 
-    def __init__(self, n_agent, n_row, n_col,
+    def __init__(self, n_agent=3, n_row=10, n_col=10,
                  agent_pos=None, dirty_pos=None, obstacle_pos=None):
-        self.n_agent = n_agent
-        self.n_row = n_row
-        self.n_col = n_col
+        self.n_row = max(5, n_row)
+        self.n_col = max(5, n_col)
+        self.n_agent = max(min(n_agent, 10), 1)
 
         self.agent_pos = agent_pos
         self.dirty_pos = dirty_pos
         self.obstacle_pos = obstacle_pos
+        
+        if obstacle_pos is None or dirty_pos is None or agent_pos is None:
+            indices = np.array([(i, j) for i in range(self.n_row) for j in range(self.n_col)])
+            
+            if obstacle_pos is None:
+                picked = np.random.choice(len(indices), self.n_row * self.n_col // 10, replace=False)
+                self.obstacle_pos = indices[picked, :]
+                indices = np.delete(indices, picked, axis=0)
+                
+            if dirty_pos is None:
+                self.dirty_pos = indices
+            
+            if agent_pos is None:
+                self.agent_pos = indices[np.random.choice(len(indices), self.n_agent, replace=False)]
 
         self.reset()
         self.dirty_layer[self.dirty_layer == self.obstacle_layer] = 0
+        
+        """Gym Env variable"""
+        self.n = self.n_agent
+        self.observation_space = np.array([np.zeros((3*3 + 3*self.n_row*self.n_col,)) for _ in range(self.n_agent)])
+        self.action_space = np.array([Discrete(5) for _ in range(self.n_agent)])
 
     def reset(self):
         self.agents = {}

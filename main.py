@@ -2,6 +2,7 @@ import numpy as np
 from maddpg import MADDPG
 from buffer import MultiAgentReplayBuffer
 # from make_env import make_env
+from environment import MAACEnv
 import time
 
 def obs_list_to_state_vector(observation):
@@ -11,12 +12,14 @@ def obs_list_to_state_vector(observation):
     return state
 
 if __name__ == '__main__':
-    #scenario = 'simple'
     # scenario = 'simple_adversary'
     # env = make_env(scenario)
+    scenario = 'multi-agent-area-cleaning'
+    env = MAACEnv()
     n_agents = env.n
     actor_dims = []
     for i in range(n_agents):
+        print(env.observation_space[i].shape)
         actor_dims.append(env.observation_space[i].shape[0])
     critic_dims = sum(actor_dims)
 
