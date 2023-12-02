@@ -49,15 +49,16 @@ class Main:
         critic_dims = sum(actor_dims)
 
         # action space is a list of arrays, assume each agent has same action space
-        n_actions = self.env.action_space[0].n
-        print(self.n_agents, actor_dims, critic_dims, n_actions)        
-        self.maddpg_agents = MADDPG(actor_dims, critic_dims, self.n_agents, n_actions, 
+        self.n_actions = self.env.action_space[0].n
+        print(self.n_agents, actor_dims, critic_dims, self.n_actions)        
+        self.maddpg_agents = MADDPG(actor_dims, critic_dims, self.n_agents, self.n_actions, 
                                     fc1=64, fc2=64,  
                                     alpha=0.01, beta=0.01, scenario=scenario,
                                     chkpt_dir='.\\tmp\\maddpg\\')
 
-        self.memory = MultiAgentReplayBuffer(1000000, critic_dims, actor_dims, 
-                            n_actions, self.n_agents, batch_size=1024)
+        self.memory = MultiAgentReplayBuffer(
+            1000000, critic_dims, actor_dims, self.n_actions, self.n_agents, 
+            batch_size=1024)
         print('preparation done')
     
     def run(self):
@@ -85,7 +86,10 @@ class Main:
                     self.env.render()
                     time.sleep(0.1) # to slow down the action for the video
                     
-                actions = self.maddpg_agents.choose_action(obs)
+                
+                # random actions
+                actions = [np.array([np.random.rand() for _ in range(self.n_actions)]) for _ in range(self.n_agents)]
+                # actions = self.maddpg_agents.choose_action(obs)
                 obs_, reward, done, info = self.env.step(actions)
 
                 state = obs_list_to_state_vector(obs)
@@ -99,8 +103,8 @@ class Main:
 
                 self.memory.store_transition(obs, state, actions, reward, obs_, state_, done)
 
-                if self.total_steps % 100 == 0 and not self.evaluate:
-                    self.maddpg_agents.learn(self.memory)
+                # if self.total_steps % 100 == 0 and not self.evaluate:
+                #     self.maddpg_agents.learn(self.memory)
 
                 obs = obs_
 
