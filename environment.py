@@ -62,10 +62,11 @@ class MAACEnv:
         return obs_n
 
     def step(self, actions):
-        rewards = []
+        rewards = [0] * self.n_agent # 에이전트 개수만큼 리워드 생성
         for i, action in enumerate(actions):
             self._step_agent(self.agents[i], action)
-
+            rewards[i]-=1 # 1-step 마다 reward -1
+            
         colision = set()
         for i, a in self.agents.items():
             for j, b in self.agents.items():
@@ -77,8 +78,25 @@ class MAACEnv:
                 if a['new_pos'] == b['new_pos']:
                     colision.add(i)
                     colision.add(j)
+                    
+            if self.obstacle_layer[a['new_pos']] == 1: # 벽과 충돌 시
+                colision.add(i)
+                
+            if a['new_pos'][0]<0 or a['new_pos'][0]>self.n_row: #밖으로 
+                colision.add(i)
+            if a['new_pos'][1]<0 or a['new_pos'][1]>self.n_col: #나감
+                colision.add(i)
+
         for i in tuple(colision):
+            rewards[i]-=1   #충돌 시 reward -1
             self._rewind_agent(self.agents[i])
+
+        for i, agent in self.agents.items():
+            if self.dirty_layer[agent['new_pos']] == 1: # 도착한 곳이 더러운 곳이라면 reward +1
+                self.dirty_layer[agent['new_pos']] = 0 # 도착한 곳은 청소 됨
+                rewards[i] += 1
+        
+        self.done = np.all(self.dirty_layer == 0)   # 전부 청소되면 done
 
     def _step_agent(self, agent, action):
         if 'new_pos' in agent:
