@@ -37,15 +37,20 @@ class MAACEnv:
         self.n = self.n_agent
         self.observation_space = np.array([np.zeros((self.visual_field**2 + 3*self.n_row*self.n_col,)) for _ in range(self.n_agent)])
         self.action_space = np.array([Discrete(5) for _ in range(self.n_agent)])
+        
+        """ GUI control """
+        self.render_callback = None
 
     def reset(self):
         self.agents = {}
-        self.agent_layer = np.zeros((self.n_row, self.n_col))
+        self.agent_layer = -np.ones((self.n_row, self.n_col))
         self.dirty_layer = np.zeros((self.n_row, self.n_col))
+        self.visited_layer = -np.ones((self.n_row, self.n_col))
 
         for i, pos in enumerate(self.agent_pos):
-            self.agents[i] = {'home': pos, 'pos': pos}
-            self.agent_layer[pos[0], pos[1]] = 1
+            self.agents[i] = {'idx': i, 'home': pos, 'pos': pos}
+            self.agent_layer[pos[0], pos[1]] = i
+            self.visited_layer[pos[0], pos[1]] = i
 
         for pos in self.dirty_pos:
             self.dirty_layer[pos[0], pos[1]] = 1
@@ -62,41 +67,70 @@ class MAACEnv:
         return obs_n
 
     def step(self, actions):
-        rewards = []
-        for i, action in enumerate(actions):
+        for i, action_prob in enumerate(actions):
+            action = np.argmax(action_prob)
             self._step_agent(self.agents[i], action)
 
-        colision = set()
+        """ invalid action check """
+        for i, a in self.agents.items():
+            if any((a['new_pos'] in self.obstacle_pos,
+                   a['new_pos'][0] < 0, a['new_pos'][0] >= self.n_row,
+                   a['new_pos'][1] < 0,a['new_pos'][1] >= self.n_col)):
+                self._rewind_agent(a)
+        
+        """ collision check"""
+        collided = set()
         for i, a in self.agents.items():
             for j, b in self.agents.items():
                 if i == j:
                     continue
                 if a['pos'] == b['new_pos'] and a['new_pos'] == b['pos']:
-                    colision.add(i)
-                    colision.add(j)
+                    collided.add(i)
+                    collided.add(j)
+                    continue
                 if a['new_pos'] == b['new_pos']:
-                    colision.add(i)
-                    colision.add(j)
-        for i in tuple(colision):
+                    collided.add(i)
+                    collided.add(j)
+                    continue
+        for i in tuple(collided):
             self._rewind_agent(self.agents[i])
+        
+        for i, agent in self.agents.items():
+            self.visited_layer[agent['new_pos']] = i
+        
+        # TODO: reward, done, info, e.t.c.
+        rewards = []
+        
+        # temp return
+        return [self.get_observation(i) for i in range(self.n_agent)], \
+                [0 for i in range(self.n_agent)], \
+                [False for i in range(self.n_agent)], self.agents
 
     def _step_agent(self, agent, action):
+        print('_step_agent', agent, action)
         if 'new_pos' in agent:
             agent['pos'] = agent['new_pos']
-
         agent['new_pos'] = (
             agent['pos'][0] + MAACEnv.ACTIONS[action][0],
             agent['pos'][1] + MAACEnv.ACTIONS[action][1]
         )
         agent['action'] = action
-        self.agent_layer[agent['pos']] = 0
-        self.agent_layer[agent['new_pos']] = 1
+        if 'new_pos' in agent:
+            self.agent_layer[agent['pos']] = -1
+            try:
+                self.agent_layer[agent['new_pos']] = agent['idx']
+            except IndexError:
+                self.agent_layer[agent['pos']] = agent['idx']
+                agent['new_pos'] = agent['pos']
 
     def _rewind_agent(self, agent):
-        self.agent_layer[agent['pos']] = 1
-        self.agent_layer[agent['new_pos']] = 0
+        if self.agent_layer[agent['pos']] not in (-1, agent['idx']):
+            self._rewind_agent(self.agents[self.agent_layer[agent['pos']]])
+        self.agent_layer[agent['pos']] = agent['idx']
         if 'new_pos' in agent:
+            self.agent_layer[agent['new_pos']] = -1
             agent['new_pos'] = agent['pos']
+        print('rewind agent', agent['idx'], 'to', agent['pos'])
 
     # 특정 에이전트의 local observation 반환
     def get_observation(self, agent_idx):
@@ -116,7 +150,8 @@ class MAACEnv:
         agent_self_layer = agent_self_layer.reshape(self.n_row*self.n_col)
         
         # 다른 에이전트
-        other_agent_layer = self.agent_layer.copy()
+        other_agent_layer = np.zeros_like(self.agent_layer)
+        other_agent_layer[np.argwhere(self.agent_layer != -1)] = 1
         other_agent_layer[pos[0], pos[1]] = 0
         other_agent_layer_flatten = other_agent_layer.reshape(self.n_row*self.n_col)
         
@@ -126,7 +161,7 @@ class MAACEnv:
         return np.concatenate((agent_vision_obstacle, agent_self_layer, other_agent_layer_flatten, dirty_layer_flatten))
         
     def render(self):
-        pass
+        self.render_callback(self.visited_layer, self.agents)
 
     def close(self):
         pass

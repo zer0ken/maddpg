@@ -1,4 +1,7 @@
+import threading
+from tkinter import Tk
 import numpy as np
+from gui import GUI
 from maddpg import MADDPG
 from buffer import MultiAgentReplayBuffer
 # from make_env import make_env
@@ -11,76 +14,127 @@ def obs_list_to_state_vector(observation):
         state = np.concatenate([state, obs])
     return state
 
-if __name__ == '__main__':
-    # scenario = 'simple_adversary'
-    # env = make_env(scenario)
-    scenario = 'multi-agent-area-cleaning'
-    env = MAACEnv()
-    n_agents = env.n
-    actor_dims = []
-    for i in range(n_agents):
-        actor_dims.append(env.observation_space[i].shape[0])
-    critic_dims = sum(actor_dims)
 
-    # action space is a list of arrays, assume each agent has same action space
-    n_actions = env.action_space[0].n
-    maddpg_agents = MADDPG(actor_dims, critic_dims, n_agents, n_actions, 
-                           fc1=64, fc2=64,  
-                           alpha=0.01, beta=0.01, scenario=scenario,
-                           chkpt_dir='.\\tmp\\maddpg\\')
-
-    memory = MultiAgentReplayBuffer(1000000, critic_dims, actor_dims, 
-                        n_actions, n_agents, batch_size=1024)
-
+class Main:
     PRINT_INTERVAL = 500
     N_GAMES = 50000
-    MAX_STEPS = 25
-    total_steps = 0
-    score_history = []
-    best_score = -np.inf
+    MAX_STEPS = 100
     
-    # configs
-    evaluate = False
-    load_chkpt = False
-    render = False
+    def __init__(self):
+        self.env = MAACEnv()
+    
+        self.total_steps = 0
+        self.score_history = []
+        self.best_score = -np.inf
+        self.fastest_solve = np.inf
+        
+        # subroutine control (GUI is main thread)
+        self.force_stop = False
+        self.game_progress = 0
+        self.game_render_period = 5 # render 1 whole game per 5 games
+        
+        # configs
+        self.evaluate = False
+        self.load_chkpt = True
+        self.force_render = False
+        
+    def prepare(self):
+        scenario = '{}_agent_{}_by_{}'.format(self.env.n_agent, self.env.n_row, self.env.n_col)
+        print('preparing scenario:', scenario)
+        
+        self.n_agents = self.env.n
+        actor_dims = []
+        for i in range(self.n_agents):
+            actor_dims.append(self.env.observation_space[i].shape[0])
+        critic_dims = sum(actor_dims)
 
-    if load_chkpt:
-        maddpg_agents.load_checkpoint()
+        # action space is a list of arrays, assume each agent has same action space
+        n_actions = self.env.action_space[0].n
+        print(self.n_agents, actor_dims, critic_dims, n_actions)        
+        self.maddpg_agents = MADDPG(actor_dims, critic_dims, self.n_agents, n_actions, 
+                                    fc1=64, fc2=64,  
+                                    alpha=0.01, beta=0.01, scenario=scenario,
+                                    chkpt_dir='.\\tmp\\maddpg\\')
 
-    for i in range(N_GAMES):
-        obs = env.reset()
-        score = 0
-        done = [False]*n_agents
-        episode_step = 0
-        while not any(done):
-            if render or evaluate:
-                env.render()
-                time.sleep(0.05) # to slow down the action for the video
-            actions = maddpg_agents.choose_action(obs)
-            obs_, reward, done, info = env.step(actions)
+        self.memory = MultiAgentReplayBuffer(1000000, critic_dims, actor_dims, 
+                            n_actions, self.n_agents, batch_size=1024)
+        print('preparation done')
+    
+    def run(self):
+        print('thread started')
+        if self.load_chkpt:
+            try:
+                self.maddpg_agents.load_checkpoint()
+            except FileNotFoundError:
+                print('no checkpoint found')
+            
+        for i in range(self.game_progress, Main.N_GAMES):
+            """ episode loop """
+            print('episode', i, 'total steps', self.total_steps)
+            
+            self.game_progress = i
+            obs = self.env.reset()
+            score = 0
+            done = [False]*self.n_agents
+            episode_step = 0
+            
+            while not any(done):
+                """ step loop """
+                
+                if self.force_render or self.evaluate or i % self.game_render_period == 0:
+                    self.env.render()
+                    time.sleep(0.1) # to slow down the action for the video
+                    
+                actions = self.maddpg_agents.choose_action(obs)
+                obs_, reward, done, info = self.env.step(actions)
 
-            state = obs_list_to_state_vector(obs)
-            state_ = obs_list_to_state_vector(obs_)
+                state = obs_list_to_state_vector(obs)
+                state_ = obs_list_to_state_vector(obs_)
 
-            if episode_step >= MAX_STEPS:
-                done = [True]*n_agents
+                if all(done):
+                    self.fastest_solve = min(self.fastest_solve, episode_step)
 
-            memory.store_transition(obs, state, actions, reward, obs_, state_, done)
+                if episode_step >= Main.MAX_STEPS:
+                    done = [True]*self.n_agents
 
-            if total_steps % 100 == 0 and not evaluate:
-                maddpg_agents.learn(memory)
+                self.memory.store_transition(obs, state, actions, reward, obs_, state_, done)
 
-            obs = obs_
+                if self.total_steps % 100 == 0 and not self.evaluate:
+                    self.maddpg_agents.learn(self.memory)
 
-            score += sum(reward)
-            total_steps += 1
-            episode_step += 1
+                obs = obs_
 
-        score_history.append(score)
-        avg_score = np.mean(score_history[-100:])
-        if not evaluate:
-            if avg_score > best_score:
-                maddpg_agents.save_checkpoint()
-                best_score = avg_score
-        if i % PRINT_INTERVAL == 0 and i > 0:
-            print('episode', i, 'average score {:.1f}'.format(avg_score))
+                score += sum(reward)
+                self.total_steps += 1
+                episode_step += 1
+                
+                if self.force_stop:
+                    break
+                
+            self.score_history.append(score)
+            avg_score = np.mean(self.score_history[-100:])
+            
+            if not self.evaluate:
+                if avg_score > self.best_score:
+                    self.save_checkpoint()
+                    self.best_score = avg_score
+                    
+            if i % self.PRINT_INTERVAL == 0 and i > 0:
+                print('episode', i, 'average score {:.1f}'.format(avg_score))
+                
+            if self.force_stop:
+                self.save_checkpoint()
+                self.forse_stop = False
+                break
+            
+            self.force_render = False
+            
+        print('thread finished')
+
+    def save_checkpoint(self):
+        self.maddpg_agents.save_checkpoint()
+
+if __name__ == '__main__':
+    tk = Tk()
+    gui = GUI(tk, Main())
+    tk.mainloop()
