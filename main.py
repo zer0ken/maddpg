@@ -19,7 +19,6 @@ if __name__ == '__main__':
     n_agents = env.n
     actor_dims = []
     for i in range(n_agents):
-        print(env.observation_space[i].shape)
         actor_dims.append(env.observation_space[i].shape[0])
     critic_dims = sum(actor_dims)
 
