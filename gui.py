@@ -10,6 +10,7 @@ class GUI(Frame):
     OBSTACLE = 0
     DIRTY = 1
     AGENT = 2
+    LEARNING = 3
     
     LITERAL = {
         OBSTACLE: '장애물/벽 위치 설정',
@@ -29,17 +30,17 @@ class GUI(Frame):
         self.cells = {}
         self.agents = {}
         
-        self.row_num = row_num
-        self.col_num = col_num
+        self.n_row = row_num
+        self.n_col = col_num
         
-        self.canvas_width = GUI.CELL_SIZE * self.col_num - 1
-        self.canvas_height = GUI.CELL_SIZE * self.row_num - 1
+        self.canvas_width = GUI.CELL_SIZE * self.n_col - 1
+        self.canvas_height = GUI.CELL_SIZE * self.n_row - 1
         
         self.dragging = []
         self.dragging_rect = None
         self.dragging_line = None
         
-        self.click_mode = GUI.OBSTACLE
+        self.gui_mode = GUI.OBSTACLE
         
         self.map_btn = None
         self.obstacle_btn = None
@@ -55,11 +56,11 @@ class GUI(Frame):
         self.statusbar.grid(row=1, column=0, sticky=(S, E, W))
         
         self.map_status = Label(self.statusbar, padx=5, bd=1, relief='sunken', anchor=W, 
-                                text='{}×{}'.format(self.row_num, self.col_num))
+                                text='{}×{}'.format(self.n_row, self.n_col))
         self.map_status.pack(side='left')
         
         self.env_status = Label(self.statusbar, padx=5, bd=1, relief='sunken', anchor=W,
-                                text=GUI.LITERAL[self.click_mode])
+                                text=GUI.LITERAL[self.gui_mode])
         self.env_status.pack(side='left', fill=X, expand=True)
 
     def init_menu(self):
@@ -85,11 +86,11 @@ class GUI(Frame):
         reset_menu = Menu(menu, tearoff=0)
         menu.add_cascade(label='초기화', menu=reset_menu)
         reset_menu.add_command(label='장애물/벽 초기화',
-                               command=lambda: self.reset(GUI.OBSTACLE))
+                               command=lambda: self.remove_all(GUI.OBSTACLE))
         reset_menu.add_command(label='청소할 구역 초기화',
-                               command=lambda: self.reset(GUI.DIRTY))
+                               command=lambda: self.remove_all(GUI.DIRTY))
         reset_menu.add_command(label='청소기 배치 초기화',
-                             command=lambda: self.reset(GUI.AGENT))
+                             command=lambda: self.remove_all(GUI.AGENT))
         
         model_menu = Menu(menu, tearoff=0)
         menu.add_cascade(label='학습', menu=model_menu)
@@ -102,14 +103,14 @@ class GUI(Frame):
         self.master.config(menu=menu)
     
     def set_click_mode(self, mode):
-        self.click_mode = mode
-        self.env_status.config(text=GUI.LITERAL[self.click_mode])
+        self.gui_mode = mode
+        self.env_status.config(text=GUI.LITERAL[self.gui_mode])
         if mode == GUI.AGENT:
             self.canvas.config(cursor='arrow')
         else:
             self.canvas.config(cursor='crosshair')
     
-    def reset(self, target):
+    def remove_all(self, target):
         if target == GUI.AGENT:
             for agent in self.agents.values():
                 agent.erase()
@@ -137,8 +138,8 @@ class GUI(Frame):
             canvas = self.canvas
             canvas.config(width=self.canvas_width, height=self.canvas_height)
 
-        for row in range(self.row_num):
-            for col in range(self.col_num):
+        for row in range(self.n_row):
+            for col in range(self.n_col):
                 if (row, col) in self.cells:
                     self.cells[(row, col)].draw()
                     continue
@@ -149,13 +150,18 @@ class GUI(Frame):
         self.canvas = canvas
 
     def on_canvas_down(self, event):
+        if self.gui_mode == GUI.LEARNING:
+            return
         self.dragging.append((event.x, event.y))
         self.dragging.append((event.x, event.y))
     
     def on_canvas_drag(self, event):
+        if self.gui_mode == GUI.LEARNING:
+            return
+        
         if self.dragging:
             self.dragging[-1] = (event.x, event.y)
-        if self.click_mode == GUI.AGENT:
+        if self.gui_mode == GUI.AGENT:
             if self.dragging_line is None:
                 self.dragging_line = self.canvas.create_line(
                     *self.dragging[0], *self.dragging[1], fill='gray', width=2)
@@ -169,6 +175,9 @@ class GUI(Frame):
                 self.canvas.coords(self.dragging_rect, *self.dragging[0], *self.dragging[1])
 
     def on_canvas_up(self, event):
+        if self.gui_mode == GUI.LEARNING:
+            return
+        
         if not self.dragging:
             return
         
@@ -179,7 +188,7 @@ class GUI(Frame):
             self.canvas.delete(self.dragging_line)
             self.dragging_line = None
             
-        if self.click_mode == GUI.AGENT:
+        if self.gui_mode == GUI.AGENT:
             down_shapes = self.canvas.find_overlapping(*self.dragging[0], *self.dragging[0])
             up_shapes = self.canvas.find_overlapping(*self.dragging[1], *self.dragging[1])
             
@@ -216,13 +225,7 @@ class GUI(Frame):
                     print('remove agent', up_pos)
                     
             elif down_pos in self.agents and down_pos != up_pos and up_pos not in self.agents:
-                selected = self.agents[down_pos]
-                del self.agents[down_pos]
-                selected.row = up_pos[0]
-                selected.col = up_pos[1]
-                self.agents[up_pos] = selected
-                selected.draw()
-                print('move agent', down_pos, 'to', up_pos)
+                self.move_agent(down_pos, up_pos)
         else:        
             rects = self.canvas.find_overlapping(*self.dragging[0], *self.dragging[1])
             for rect in rects:
@@ -230,14 +233,23 @@ class GUI(Frame):
                     continue
                 cell = self.rect_to_cell[rect]
                 cell.onclick({
-                    'mode': self.click_mode,
+                    'mode': self.gui_mode,
                 })
                 
                 cell_pos = (cell.row, cell.col)
-                if cell_pos in self.agents and self.click_mode == GUI.OBSTACLE:
+                if cell_pos in self.agents and self.gui_mode == GUI.OBSTACLE:
                     self.agents[cell_pos].erase()
                     del self.agents[cell_pos]
         self.dragging.clear()
+
+    def move_agent(self, from_, to):
+        selected = self.agents[from_]
+        del self.agents[from_]
+        selected.row = to[0]
+        selected.col = to[1]
+        self.agents[to] = selected
+        selected.draw()
+        print('move agent', from_, 'to', to)
             
     def set_map_size(self, row_num=None, col_num=None):
         if row_num is None:
@@ -246,28 +258,28 @@ class GUI(Frame):
             col_num = askinteger('', '공간의 열 개수를 입력하세요.')
         if row_num is None or col_num is None:
             return
-        self.row_num = min(max(2, row_num), 20)
-        self.col_num = min(max(2, col_num), 20)
+        self.n_row = min(max(2, row_num), 20)
+        self.n_col = min(max(2, col_num), 20)
         
-        self.canvas_width = self.CELL_SIZE * self.col_num - 1
-        self.canvas_height = self.CELL_SIZE * self.row_num - 1
+        self.canvas_width = self.CELL_SIZE * self.n_col - 1
+        self.canvas_height = self.CELL_SIZE * self.n_row - 1
         
         self.init_canvas()
-        self.map_status.config(text='{}×{}'.format(self.row_num, self.col_num))
+        self.map_status.config(text='{}×{}'.format(self.n_row, self.n_col))
     
     def export_env(self):
         obstacles = []
         dirties = []
         agents = []
         for pos, cell in self.cells.items():
-            if pos[0] >= self.row_num or pos[1] >= self.col_num:
+            if pos[0] >= self.n_row or pos[1] >= self.n_col:
                 continue
             if cell.obstacle:
                 obstacles.append((cell.row, cell.col))
             if cell.dirty:
                 dirties.append((cell.row, cell.col))
         for pos in self.agents.keys():
-            if pos[0] >= self.row_num or pos[1] >= self.col_num:
+            if pos[0] >= self.n_row or pos[1] >= self.n_col:
                 continue
             agents.append(pos)
         
@@ -275,6 +287,20 @@ class GUI(Frame):
         print('* obstacles:', obstacles)
         print('* dirties:', dirties)
         print('* agents:', agents)
+    
+    def render(self, agents, visited):
+        for row in range(self.n_row):
+            for col in range(self.n_col):
+                if visited[row, col] != -1:
+                    cell = self.cells[row, col]
+                    color = self.agents[tuple(agents[visited[row, col]]['pos'])].color
+                    cell.visited = True
+                    cell.visited_color = color
+                    cell.draw()
+        for agent in agents:
+            self.move_agent(agent['pos'], agent['new_pos'])
+        pass
+    
 
 class Cell:
     def __init__(self, canvas, row, col):
@@ -283,7 +309,7 @@ class Cell:
         self.col = col
         self.dirty = False
         self.obstacle = False
-        self.visited= False
+        self.visited = False
         
         self.rect = None
         self.draw()
@@ -299,7 +325,9 @@ class Cell:
         color = 'white'
         if self.obstacle:
             color = 'black'
-        elif self.dirty and not self.visited:
+        elif self.visited:
+            color = self.visited_color
+        elif self.dirty:
             color ='gray80'
         self.canvas.itemconfig(self.rect, fill=color)
 
