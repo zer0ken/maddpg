@@ -102,14 +102,13 @@ class MAACEnv:
     def get_observation(self, agent_idx):
         pos = self.agents[agent_idx]['pos']
         padded_pos = np.array([pos[0]+1, pos[1]+1])
-        print(f'#### {agent_idx} ####')
-        print(pos)
+        
         # 에이전트 주변 시야
         padded_obstacle_layer = np.ones((self.n_row+2, self.n_col+2))
         padded_obstacle_layer[1:-1, 1:-1] = self.obstacle_layer
-        agent_vision_obstacle = padded_obstacle_layer[padded_pos[0]-1:padded_pos[0]+2, padded_pos[1]-1:padded_pos[1]+2]
+        vf=self.visual_field//2
+        agent_vision_obstacle = padded_obstacle_layer[padded_pos[0]-vf:padded_pos[0]+(vf+1), padded_pos[1]-vf:padded_pos[1]+(vf+1)]
         agent_vision_obstacle = agent_vision_obstacle.reshape(self.visual_field**2)
-        print(agent_vision_obstacle)
         
         # 에이전트 자신
         agent_self_layer = np.zeros((self.n_row, self.n_col))
