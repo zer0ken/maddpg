@@ -28,39 +28,38 @@ class MAACEnv:
             if agent_pos is None:
                 self.agent_pos = indices[np.random.choice(len(indices), self.n_agent, replace=False)]
 
+        self.visual_field = 3
+        
         self.reset()
         self.dirty_layer[self.dirty_layer == self.obstacle_layer] = 0
         
         """Gym Env variable"""
         self.n = self.n_agent
-        self.observation_space = np.array([np.zeros((3*3 + 3*self.n_row*self.n_col,)) for _ in range(self.n_agent)])
+        self.observation_space = np.array([np.zeros((self.visual_field**2 + 3*self.n_row*self.n_col,)) for _ in range(self.n_agent)])
         self.action_space = np.array([Discrete(5) for _ in range(self.n_agent)])
 
     def reset(self):
         self.agents = {}
         self.agent_layer = np.zeros((self.n_row, self.n_col))
         self.dirty_layer = np.zeros((self.n_row, self.n_col))
-        self.obstacle_layer = np.zeros((self.n_row, self.n_col))
 
         for i, pos in enumerate(self.agent_pos):
             self.agents[i] = {'home': pos, 'pos': pos}
-            self.agent_layer[pos] = 1
+            self.agent_layer[pos[0], pos[1]] = 1
 
         for pos in self.dirty_pos:
-            self.dirty_layer[pos] = 1
+            self.dirty_layer[pos[0], pos[1]] = 1
 
-        for pos in self.obstacle_pos:
-            self.obstacle_layer[pos] = 1
-
-        for i, pos in enumerate(self.agent_pos):
-            self.agents[i] = {'home': pos, 'pos': pos}
-            self.agent_layer[pos] = 1
-
-        for pos in self.dirty_pos:
-            self.dirty_layer[pos] = 1
-
-        for pos in self.obstacle_pos:
-            self.obstacle_layer[pos] = 1
+        # 환경 처음 만들 때만 obstacle_layer 초기화
+        if not hasattr(self, 'obstacle_layer'):
+            self.obstacle_layer = np.zeros((self.n_row, self.n_col))
+            for pos in self.obstacle_pos:
+                self.obstacle_layer[pos[0], pos[1]] = 1
+        
+        obs_n = []
+        for agent_idx in range(self.n_agent):
+            obs_n.append(self.get_observation(agent_idx))
+        return obs_n
 
     def step(self, actions):
         rewards = []
@@ -99,6 +98,34 @@ class MAACEnv:
         if 'new_pos' in agent:
             agent['new_pos'] = agent['pos']
 
+    # 특정 에이전트의 local observation 반환
+    def get_observation(self, agent_idx):
+        pos = self.agents[agent_idx]['pos']
+        padded_pos = np.array([pos[0]+1, pos[1]+1])
+        print(f'#### {agent_idx} ####')
+        print(pos)
+        # 에이전트 주변 시야
+        padded_obstacle_layer = np.ones((self.n_row+2, self.n_col+2))
+        padded_obstacle_layer[1:-1, 1:-1] = self.obstacle_layer
+        agent_vision_obstacle = padded_obstacle_layer[padded_pos[0]-1:padded_pos[0]+2, padded_pos[1]-1:padded_pos[1]+2]
+        agent_vision_obstacle = agent_vision_obstacle.reshape(self.visual_field**2)
+        print(agent_vision_obstacle)
+        
+        # 에이전트 자신
+        agent_self_layer = np.zeros((self.n_row, self.n_col))
+        agent_self_layer[pos[0], pos[1]] = 1
+        agent_self_layer = agent_self_layer.reshape(self.n_row*self.n_col)
+        
+        # 다른 에이전트
+        other_agent_layer = self.agent_layer.copy()
+        other_agent_layer[pos[0], pos[1]] = 0
+        other_agent_layer_flatten = other_agent_layer.reshape(self.n_row*self.n_col)
+        
+        # 청소해야할 곳
+        dirty_layer_flatten = self.dirty_layer.copy().reshape(self.n_row*self.n_col)
+        
+        return np.concatenate((agent_vision_obstacle, agent_self_layer, other_agent_layer_flatten, dirty_layer_flatten))
+        
     def render(self):
         pass
 
