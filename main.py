@@ -31,7 +31,7 @@ class Main:
         # subroutine control (GUI is main thread)
         self.force_stop = False
         self.game_progress = 0
-        self.game_render_period = 5 # render 1 whole game per 5 games
+        self.game_render_period = 10 # render 1 whole game per 5 games
         
         # configs
         self.evaluate = False

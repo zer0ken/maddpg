@@ -107,7 +107,6 @@ class MAACEnv:
                 [False for i in range(self.n_agent)], self.agents
 
     def _step_agent(self, agent, action):
-        print('_step_agent', agent, action)
         if 'new_pos' in agent:
             agent['pos'] = agent['new_pos']
         agent['new_pos'] = (
@@ -130,7 +129,6 @@ class MAACEnv:
         if 'new_pos' in agent:
             self.agent_layer[agent['new_pos']] = -1
             agent['new_pos'] = agent['pos']
-        print('rewind agent', agent['idx'], 'to', agent['pos'])
 
     # 특정 에이전트의 local observation 반환
     def get_observation(self, agent_idx):
@@ -160,7 +158,7 @@ class MAACEnv:
         
         return np.concatenate((agent_vision_obstacle, agent_self_layer, other_agent_layer_flatten, dirty_layer_flatten))
         
-    def render(self):
+    def render(self, d):
         self.render_callback(self.visited_layer, self.agents)
 
     def close(self):
