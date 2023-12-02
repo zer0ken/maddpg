@@ -158,7 +158,7 @@ class MAACEnv:
         
         return np.concatenate((agent_vision_obstacle, agent_self_layer, other_agent_layer_flatten, dirty_layer_flatten))
         
-    def render(self, d):
+    def render(self):
         self.render_callback(self.visited_layer, self.agents)
 
     def close(self):
