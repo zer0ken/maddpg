@@ -20,7 +20,7 @@ class GUI(Frame):
         OBSTACLE: '장애물/벽 위치 설정',
         DIRTY: '청소할 구역 설정',
         AGENT: '청소기 배치',
-        FIXED: '학습 준비 중'
+        FIXED: '학습 준비 중...'
     }
     
     CELL_SIZE = 50
@@ -72,7 +72,7 @@ class GUI(Frame):
         self.env_status.pack(side='left', fill=X)
         
         self.run_status = Label(self.statusbar, padx=5, bd=1, relief='sunken', anchor=W,
-                                text='학습 환경 입력 중')
+                                text='학습 환경 입력 중...')
         self.run_status.pack(side='left', fill=X, expand=True)
         
 
@@ -378,9 +378,18 @@ class GUI(Frame):
         
         self.running_thread = Thread(target=self.main.run, daemon=True)
         self.running_thread.start()
-        self.env_status.config(text='학습 중')
+        self.env_status.config(text='학습 중...')
         
     def stop_learn(self):
+        print('stop learn')
+        if self.running_thread is None:
+            return
+            
+        self.env_status.config(text='학습 중단 중...')
+        
+        
+        print('wait for thread to stop')
+        
         self.main.force_stop = True
         self.running_thread.join()
         self.running_thread = None
@@ -393,7 +402,7 @@ class GUI(Frame):
         self.main.env.reset()
         self.init_with_env(self.main.env)
         self.exported_env = False
-        self.run_status.config(text='학습 환경 입력 중')
+        self.run_status.config(text='학습 환경 입력 중...')
         self.set_gui_mode(GUI.OBSTACLE)
         
     def render(self, steps=None, visited_layer=None, agents_info=None, 

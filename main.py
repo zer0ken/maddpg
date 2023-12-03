@@ -18,7 +18,7 @@ def obs_list_to_state_vector(observation):
 class Main:
     PRINT_INTERVAL = 100
     N_GAMES = 50000
-    MAX_STEPS = 200
+    MAX_STEPS = 10000
     
     def __init__(self):
         self.env = MAACEnv.import_last_env()
@@ -80,15 +80,9 @@ class Main:
             score = 0
             done = [False]*self.n_agents
             episode_step = 0
-            
-            self.env.render(episode=self.game_progress, **self.env.get_info())
-            
+                        
             while not any(done):
                 """ step loop """
-                
-                if self.force_render or self.evaluate or i % self.game_render_period == 0:
-                    self.env.render(visual=True, episode=self.game_progress, **self.env.get_info())
-                    # time.sleep(0.1) # to slow down the action for the video
                 
                 # random actions
                 # actions = [np.array([np.random.rand() for _ in range(self.n_actions)]) for _ in range(self.n_agents)]
@@ -108,6 +102,7 @@ class Main:
                 self.memory.store_transition(obs, state, actions, reward, obs_, state_, done)
 
                 if self.total_steps % 100 == 0 and not self.evaluate:
+                    print('\tlearning...', self.total_steps)
                     self.maddpg_agents.learn(self.memory)
 
                 obs = obs_
@@ -116,7 +111,12 @@ class Main:
                 self.total_steps += 1
                 episode_step += 1
                 
+                if self.force_render or self.evaluate or i % self.game_render_period == 0:
+                    self.env.render(visual=True, episode=self.game_progress, **self.env.get_info())
+                    # time.sleep(0.1) # to slow down the action for the video
+                
                 if self.force_stop:
+                    print('force stop')
                     break
                 
             self.score_history.append(score)
@@ -135,7 +135,9 @@ class Main:
                 self.force_stop = False
                 break
             
-            self.force_render = False
+            self.env.render(episode=self.game_progress, **self.env.get_info())
+            
+        self.force_render = False
             
         print('thread finished')
 
