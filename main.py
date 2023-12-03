@@ -74,7 +74,6 @@ class Main:
             
         for i in range(self.game_progress, Main.N_GAMES):
             """ episode loop """
-            print('episode', i, 'total steps', self.total_steps)
             
             self.game_progress = i
             obs = self.env.reset()
@@ -82,14 +81,14 @@ class Main:
             done = [False]*self.n_agents
             episode_step = 0
             
+            self.env.render(episode=self.game_progress, **self.env.get_info())
+            
             while not any(done):
                 """ step loop """
                 
                 if self.force_render or self.evaluate or i % self.game_render_period == 0:
                     self.env.render(visual=True, episode=self.game_progress, **self.env.get_info())
                     # time.sleep(0.1) # to slow down the action for the video
-                else:
-                    self.env.render(episode=self.game_progress, **self.env.get_info())
                 
                 # random actions
                 # actions = [np.array([np.random.rand() for _ in range(self.n_actions)]) for _ in range(self.n_agents)]
@@ -97,8 +96,6 @@ class Main:
                 actions = self.maddpg_agents.choose_action(obs)
                 obs_, reward, done, info = self.env.step(actions)
                 
-                print('@@@ step', episode_step, ', info\n', info)
-
                 state = obs_list_to_state_vector(obs)
                 state_ = obs_list_to_state_vector(obs_)
 
