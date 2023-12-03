@@ -70,7 +70,7 @@ class MAACEnv:
 
     def step(self, actions):
         rewards = [0 for i in range(self.n_agent)]
-        for i, action in enumerate(actions):
+        for i, action_prob in enumerate(actions):
             action = np.argmax(action_prob)
             self._step_agent(self.agents[i], action)
             rewards[i] -= 1 # 1-step 마다 reward -1
@@ -111,19 +111,21 @@ class MAACEnv:
         done = [False for i in range(self.n_agent)]
         info = self.get_info()
         
-        #done = np.all(self.dirty_layer == 0)   # 전부 청소되면 done
+        if np.all(self.dirty_layer == 0):
+            done = [True for i in range(self.n_agent)]   # 전부 청소되면 done
         
         # something to do before return goes here
         self.steps += 1
-
-        return observations, rewards, done, info
 
         for i, agent in self.agents.items():
             if self.dirty_layer[agent['new_pos']] == 1: # 도착한 곳이 더러운 곳이라면 reward +1
                 self.dirty_layer[agent['new_pos']] = 0 # 도착한 곳은 청소 됨
                 rewards[i] += 1
+            agent['reward'] = rewards[i]
         
         self.done = np.all(self.dirty_layer == 0)   # 전부 청소되면 done
+        
+        return observations, rewards, done, info
 
     def _step_agent(self, agent, action):
         if 'new_pos' in agent:

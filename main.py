@@ -90,9 +90,12 @@ class Main:
                     self.env.render(episode=self.game_progress, **self.env.get_info())
                 
                 # random actions
-                actions = [np.array([np.random.rand() for _ in range(self.n_actions)]) for _ in range(self.n_agents)]
-                # actions = self.maddpg_agents.choose_action(obs)
+                # actions = [np.array([np.random.rand() for _ in range(self.n_actions)]) for _ in range(self.n_agents)]
+                
+                actions = self.maddpg_agents.choose_action(obs)
                 obs_, reward, done, info = self.env.step(actions)
+                
+                print('@@@ step', episode_step, ', info\n', info)
 
                 state = obs_list_to_state_vector(obs)
                 state_ = obs_list_to_state_vector(obs_)
@@ -105,8 +108,8 @@ class Main:
 
                 self.memory.store_transition(obs, state, actions, reward, obs_, state_, done)
 
-                # if self.total_steps % 100 == 0 and not self.evaluate:
-                #     self.maddpg_agents.learn(self.memory)
+                if self.total_steps % 100 == 0 and not self.evaluate:
+                    self.maddpg_agents.learn(self.memory)
 
                 obs = obs_
 
