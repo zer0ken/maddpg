@@ -130,7 +130,7 @@ class Main:
                 
             if self.force_stop:
                 self.save_checkpoint()
-                self.forse_stop = False
+                self.force_stop = False
                 break
             
             self.force_render = False
