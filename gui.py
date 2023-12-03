@@ -77,7 +77,7 @@ class GUI(Frame):
         
 
         self.canvas = None
-        self.init_with_env()
+        self.init_with_env(self.main.env)
 
     def init_with_env(self, env=None):
         if env is None:
