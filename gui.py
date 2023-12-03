@@ -1,5 +1,4 @@
 from threading import Thread
-import time
 from tkinter import Frame, Canvas, N, S, E, W, Menu, X, Label, W
 from tkinter import ttk
 from tkinter.simpledialog import askinteger
@@ -21,6 +20,7 @@ class GUI(Frame):
         OBSTACLE: '장애물/벽 위치 설정',
         DIRTY: '청소할 구역 설정',
         AGENT: '청소기 배치',
+        FIXED: '학습 준비 중'
     }
     
     CELL_SIZE = 50
@@ -77,10 +77,11 @@ class GUI(Frame):
         
 
         self.canvas = None
-        self.init_with_random_env()
+        self.init_with_env()
 
-    def init_with_random_env(self):
-        env = MAACEnv()
+    def init_with_env(self, env=None):
+        if env is None:
+            env = MAACEnv()
         
         self.n_row = env.n_row
         self.n_col = env.n_col
@@ -99,7 +100,15 @@ class GUI(Frame):
             self.pos_to_cell[pos[0], pos[1]].draw()
         
         for pos in env.agent_pos:
-            self.add_agent(tuple(pos))
+            pos = tuple(pos)
+            if pos not in self.pos_to_agent:
+                self.add_agent(pos)
+        
+        for row in range(self.n_row):
+            for col in range(self.n_col):
+                cell = self.pos_to_cell[row, col]
+                cell.visited = False
+                cell.draw()
 
     def init_menu(self):
         menu = Menu(self.master)
@@ -137,7 +146,8 @@ class GUI(Frame):
         model_menu.add_command(label='학습 중단',
                                command=self.stop_learn)
         model_menu.add_separator()
-        model_menu.add_command(label='학습 초기화')
+        model_menu.add_command(label='학습 초기화',
+                               command=self.reset_learn)
         
         test_menu = Menu(menu, tearoff=0)
         menu.add_cascade(label='테스트', menu=test_menu)
@@ -152,7 +162,9 @@ class GUI(Frame):
         
         self.gui_mode = mode
         self.env_status.config(text=GUI.LITERAL[self.gui_mode])
-        if mode == GUI.AGENT:
+        if mode == GUI.FIXED:
+            self.canvas.config(cursor='arrow')
+        elif mode == GUI.AGENT:
             self.canvas.config(cursor='arrow')
         else:
             self.canvas.config(cursor='crosshair')
@@ -336,7 +348,7 @@ class GUI(Frame):
         if self.running_thread is not None:
             return
         
-        self.gui_mode = GUI.FIXED
+        self.set_gui_mode(GUI.FIXED)
         
         if not self.exported_env:
             obstacle_pos = []
@@ -361,17 +373,28 @@ class GUI(Frame):
             
             self.main.env = env
             self.main.prepare()
-            self.exported_env = True
-            self.gui_mode = GUI.FIXED
+            self.set_gui_mode(GUI.FIXED)
             self.exported_env = True
         
         self.running_thread = Thread(target=self.main.run, daemon=True)
         self.running_thread.start()
+        self.env_status.config(text='학습 중')
         
     def stop_learn(self):
         self.main.force_stop = True
         self.running_thread.join()
         self.running_thread = None
+        self.env_status.config(text='학습 중단됨')
+
+    def reset_learn(self):
+        if self.running_thread is not None:
+            self.stop_learn()
+        
+        self.main.env.reset()
+        self.init_with_env(self.main.env)
+        self.exported_env = False
+        self.run_status.config(text='학습 환경 입력 중')
+        self.set_gui_mode(GUI.OBSTACLE)
         
     def render(self, steps=None, visited_layer=None, agents_info=None, 
                visual=None, **kwargs):

@@ -23,24 +23,24 @@ class Main:
     def __init__(self):
         self.env = MAACEnv()
     
-        self.total_steps = 0
-        self.score_history = []
-        self.best_score = -np.inf
-        self.fastest_solve = np.inf
-        
-        # subroutine control (GUI is main thread)
-        self.force_stop = False
-        self.game_progress = 0
-        self.game_render_period = 10 # render 1 whole game per 5 games
-        
         # configs
         self.evaluate = False
         self.load_chkpt = True
         self.force_render = False
         
+        # subroutine control (GUI is main thread)
+        self.force_stop = False
+        self.game_progress = 0
+        self.game_render_period = 100 # render 1 whole game per 100 games
+        
     def prepare(self):
         scenario = '{}_agent_{}_by_{}'.format(self.env.n_agent, self.env.n_row, self.env.n_col)
         print('preparing scenario:', scenario)
+        
+        self.total_steps = 0
+        self.score_history = []
+        self.best_score = -np.inf
+        self.fastest_solve = np.inf
         
         self.n_agents = self.env.n
         actor_dims = []
