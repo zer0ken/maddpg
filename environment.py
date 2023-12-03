@@ -37,15 +37,22 @@ class MAACEnv:
         self.n = self.n_agent
         self.observation_space = np.array([np.zeros((self.visual_field**2 + 3*self.n_row*self.n_col,)) for _ in range(self.n_agent)])
         self.action_space = np.array([Discrete(5) for _ in range(self.n_agent)])
+        
+        """ GUI control """
+        self.render_callback = None
 
     def reset(self):
         self.agents = {}
-        self.agent_layer = np.zeros((self.n_row, self.n_col))
+        self.agent_layer = -np.ones((self.n_row, self.n_col))
         self.dirty_layer = np.zeros((self.n_row, self.n_col))
+        self.visited_layer = -np.ones((self.n_row, self.n_col))
+        
+        self.steps = 0
 
         for i, pos in enumerate(self.agent_pos):
-            self.agents[i] = {'home': pos, 'pos': pos}
-            self.agent_layer[pos[0], pos[1]] = 1
+            self.agents[i] = {'idx': i, 'home': pos, 'pos': pos}
+            self.agent_layer[pos[0], pos[1]] = i
+            self.visited_layer[pos[0], pos[1]] = i
 
         for pos in self.dirty_pos:
             self.dirty_layer[pos[0], pos[1]] = 1
@@ -62,34 +69,54 @@ class MAACEnv:
         return obs_n
 
     def step(self, actions):
-        rewards = [0] * self.n_agent # 에이전트 개수만큼 리워드 생성
+        rewards = [0 for i in range(self.n_agent)]
         for i, action in enumerate(actions):
+            action = np.argmax(action_prob)
             self._step_agent(self.agents[i], action)
-            rewards[i]-=1 # 1-step 마다 reward -1
-            
-        colision = set()
+            rewards[i] -= 1 # 1-step 마다 reward -1
+
+        """ invalid action check"""
+        for i, a in self.agents.items():
+            if any((a['new_pos'] in self.obstacle_pos,
+                   a['new_pos'][0] < 0, a['new_pos'][0] >= self.n_row,
+                   a['new_pos'][1] < 0,a['new_pos'][1] >= self.n_col)):
+                self._rewind_agent(a)
+                rewards[i] -= 1 # 벽, 장애물과 충돌
+                     
+        collided = set()
         for i, a in self.agents.items():
             for j, b in self.agents.items():
-                if i == j:
+                if i >= j:
                     continue
                 if a['pos'] == b['new_pos'] and a['new_pos'] == b['pos']:
-                    colision.add(i)
-                    colision.add(j)
+                    collided.add(i)
+                    collided.add(j)
+                    continue
                 if a['new_pos'] == b['new_pos']:
-                    colision.add(i)
-                    colision.add(j)
-                    
-            if self.obstacle_layer[a['new_pos']] == 1: # 벽과 충돌 시
-                colision.add(i)
-                
-            if a['new_pos'][0]<0 or a['new_pos'][0]>self.n_row: #밖으로 
-                colision.add(i)
-            if a['new_pos'][1]<0 or a['new_pos'][1]>self.n_col: #나감
-                colision.add(i)
-
-        for i in tuple(colision):
-            rewards[i]-=1   #충돌 시 reward -1
+                    collided.add(i)
+                    collided.add(j)
+        for i in tuple(collided):
             self._rewind_agent(self.agents[i])
+            rewards[i] -= 1 #충돌한 애들끼리 +1
+        
+        for i, agent in self.agents.items():
+            self.visited_layer[agent['new_pos']] = i
+            if self.dirty_layer[agent['new_pos']] == 1:
+                self.dirty_layer[agent['new_pos']] = 0 
+                rewards[i] +=1 # 청소 했으니까 +1
+                
+        
+        # TODO: evaluate reward, done, e.t.c.
+        observations = [self.get_observation(i) for i in range(self.n_agent)]
+        done = [False for i in range(self.n_agent)]
+        info = self.get_info()
+        
+        #done = np.all(self.dirty_layer == 0)   # 전부 청소되면 done
+        
+        # something to do before return goes here
+        self.steps += 1
+
+        return observations, rewards, done, info
 
         for i, agent in self.agents.items():
             if self.dirty_layer[agent['new_pos']] == 1: # 도착한 곳이 더러운 곳이라면 reward +1
@@ -101,19 +128,25 @@ class MAACEnv:
     def _step_agent(self, agent, action):
         if 'new_pos' in agent:
             agent['pos'] = agent['new_pos']
-
         agent['new_pos'] = (
             agent['pos'][0] + MAACEnv.ACTIONS[action][0],
             agent['pos'][1] + MAACEnv.ACTIONS[action][1]
         )
         agent['action'] = action
-        self.agent_layer[agent['pos']] = 0
-        self.agent_layer[agent['new_pos']] = 1
+        if 'new_pos' in agent:
+            self.agent_layer[agent['pos']] = -1
+            try:
+                self.agent_layer[agent['new_pos']] = agent['idx']
+            except IndexError:
+                self.agent_layer[agent['pos']] = agent['idx']
+                agent['new_pos'] = agent['pos']
 
     def _rewind_agent(self, agent):
-        self.agent_layer[agent['pos']] = 1
-        self.agent_layer[agent['new_pos']] = 0
+        if self.agent_layer[agent['pos']] not in (-1, agent['idx']):
+            self._rewind_agent(self.agents[self.agent_layer[agent['pos']]])
+        self.agent_layer[agent['pos']] = agent['idx']
         if 'new_pos' in agent:
+            self.agent_layer[agent['new_pos']] = -1
             agent['new_pos'] = agent['pos']
 
     # 특정 에이전트의 local observation 반환
@@ -134,7 +167,8 @@ class MAACEnv:
         agent_self_layer = agent_self_layer.reshape(self.n_row*self.n_col)
         
         # 다른 에이전트
-        other_agent_layer = self.agent_layer.copy()
+        other_agent_layer = np.zeros_like(self.agent_layer)
+        other_agent_layer[np.argwhere(self.agent_layer != -1)] = 1
         other_agent_layer[pos[0], pos[1]] = 0
         other_agent_layer_flatten = other_agent_layer.reshape(self.n_row*self.n_col)
         
@@ -143,8 +177,18 @@ class MAACEnv:
         
         return np.concatenate((agent_vision_obstacle, agent_self_layer, other_agent_layer_flatten, dirty_layer_flatten))
         
-    def render(self):
-        pass
+    def get_info(self):
+        # we can use this to render GUI, do debug, and e.t.c. 
+        info = {
+            'steps': self.steps,
+            'agents_info': self.agents,
+            'visited_layer': self.visited_layer,
+            'dirty_layer': self.dirty_layer,
+        }
+        return info
+    
+    def render(self, *args, **kwargs):
+        self.render_callback(*args, **kwargs)
 
     def close(self):
         pass
