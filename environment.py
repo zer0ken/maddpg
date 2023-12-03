@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from gym.spaces import Discrete
 
@@ -13,6 +14,8 @@ class MAACEnv:
         self.agent_pos = agent_pos
         self.dirty_pos = dirty_pos
         self.obstacle_pos = obstacle_pos
+        
+        self.exported = False
         
         if obstacle_pos is None or dirty_pos is None or agent_pos is None:
             indices = np.array([(i, j) for i in range(self.n_row) for j in range(self.n_col)])
@@ -33,7 +36,7 @@ class MAACEnv:
         self.reset()
         self.dirty_layer[self.dirty_layer == self.obstacle_layer] = 0
         
-        """Gym Env variable"""
+        """ Gym Env variable """
         self.n = self.n_agent
         self.observation_space = np.array([np.zeros((self.visual_field**2 + 3*self.n_row*self.n_col,)) for _ in range(self.n_agent)])
         self.action_space = np.array([Discrete(5) for _ in range(self.n_agent)])
@@ -69,13 +72,16 @@ class MAACEnv:
         return obs_n
 
     def step(self, actions):
+        if not self.exported:
+            self.export()
+        
         rewards = [0 for i in range(self.n_agent)]
         for i, action_prob in enumerate(actions):
             action = np.argmax(action_prob)
             self._step_agent(self.agents[i], action)
             rewards[i] -= 1 # 1-step 마다 reward -1
 
-        """ invalid action check"""
+        """ invalid action check """
         for i, a in self.agents.items():
             if any((a['new_pos'] in self.obstacle_pos,
                    a['new_pos'][0] < 0, a['new_pos'][0] >= self.n_row,
@@ -104,7 +110,6 @@ class MAACEnv:
             if self.dirty_layer[agent['new_pos']] == 1:
                 self.dirty_layer[agent['new_pos']] = 0 
                 rewards[i] +=1 # 청소 했으니까 +1
-                
         
         # TODO: evaluate reward, done, e.t.c.
         observations = [self.get_observation(i) for i in range(self.n_agent)]
@@ -194,3 +199,22 @@ class MAACEnv:
 
     def close(self):
         pass
+    
+    def export(self):
+        np.array([self.n_agent, self.n_row, self.n_col]).tofile('./last_env/args.dat')
+        np.array(self.agent_pos).tofile('./last_env/agent_pos.dat')
+        np.array(self.dirty_pos).tofile('./last_env/dirty_pos.dat')
+        np.array(self.obstacle_pos).tofile('./last_env/obstacle_pos.dat')
+        
+        self.exported = True
+    
+    def import_last_env():
+        if not os.path.exists('./last_env/args.dat'):
+            return None
+        
+        args = np.fromfile('./last_env/args.dat', dtype=np.int32)
+        agent_pos = np.fromfile('./last_env/agent_pos.dat', dtype=np.int32).reshape(args[0], 2)
+        dirty_pos = np.fromfile('./last_env/dirty_pos.dat', dtype=np.int32).reshape(-1, 2)
+        obstacle_pos = np.fromfile('./last_env/obstacle_pos.dat', dtype=np.int32).reshape(-1, 2)
+        
+        return MAACEnv(*args, agent_pos=agent_pos, dirty_pos=dirty_pos, obstacle_pos=obstacle_pos)

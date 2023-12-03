@@ -16,12 +16,14 @@ def obs_list_to_state_vector(observation):
 
 
 class Main:
-    PRINT_INTERVAL = 500
+    PRINT_INTERVAL = 100
     N_GAMES = 50000
-    MAX_STEPS = 100
+    MAX_STEPS = 200
     
     def __init__(self):
-        self.env = MAACEnv()
+        self.env = MAACEnv.import_last_env()
+        if self.env is None:
+            self.env = MAACEnv()
     
         # configs
         self.evaluate = False
