@@ -133,7 +133,7 @@ class GUI(Frame):
         model_menu = Menu(menu, tearoff=0)
         menu.add_cascade(label='학습', menu=model_menu)
         model_menu.add_command(label='학습 시작',
-                               command=self. m,.start_learn)
+                               command=self.start_learn)
         model_menu.add_command(label='학습 중단',
                                command=self.stop_learn)
         model_menu.add_separator()
