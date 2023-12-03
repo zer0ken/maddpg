@@ -85,7 +85,7 @@ class Main:
                 
                 if self.force_render or self.evaluate or i % self.game_render_period == 0:
                     self.env.render(visual=True, episode=self.game_progress, **self.env.get_info())
-                    time.sleep(0.1) # to slow down the action for the video
+                    # time.sleep(0.1) # to slow down the action for the video
                 else:
                     self.env.render(episode=self.game_progress, **self.env.get_info())
                 

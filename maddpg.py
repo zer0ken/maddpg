@@ -42,10 +42,10 @@ class MADDPG:
 
         device = self.agents[0].actor.device
 
-        states = T.tensor(states, dtype=T.float).to(device)
-        actions = T.tensor(actions, dtype=T.float).to(device)
+        states = T.tensor(states, dtype=T.float32).to(device).clone().detach()
+        actions = T.tensor(actions, dtype=T.float32).to(device)
         rewards = T.tensor(rewards).to(device)
-        states_ = T.tensor(states_, dtype=T.float).to(device)
+        states_ = T.tensor(states_, dtype=T.float32).to(device)
         dones = T.tensor(dones).to(device)
 
         all_agents_new_actions = []
@@ -54,19 +54,19 @@ class MADDPG:
 
         for agent_idx, agent in enumerate(self.agents):
             new_states = T.tensor(actor_new_states[agent_idx], 
-                                 dtype=T.float).to(device)
+                                 dtype=T.float32).to(device)
 
             new_pi = agent.target_actor.forward(new_states)
 
             all_agents_new_actions.append(new_pi)
             mu_states = T.tensor(actor_states[agent_idx], 
-                                 dtype=T.float).to(device)
+                                 dtype=T.float32).to(device)
             pi = agent.actor.forward(mu_states)
             all_agents_new_mu_actions.append(pi)
             old_agents_actions.append(actions[agent_idx])
 
         new_actions = T.cat([acts for acts in all_agents_new_actions], dim=1)
-        mu = T.cat([acts for acts in all_agents_new_mu_actions], dim=1)
+        mu = T.cat([acts for acts in all_agents_new_mu_actions], dim=1).clone().detach()
         old_actions = T.cat([acts for acts in old_agents_actions],dim=1)
 
         for agent_idx, agent in enumerate(self.agents):
@@ -75,7 +75,7 @@ class MADDPG:
             critic_value = agent.critic.forward(states, old_actions).flatten()
 
             target = rewards[:,agent_idx] + agent.gamma*critic_value_.clone().detach()
-            critic_loss = F.mse_loss(target, critic_value)
+            critic_loss = F.mse_loss(target.to(T.float32), critic_value.to(T.float32))
             agent.critic.optimizer.zero_grad()
             critic_loss.backward(retain_graph=True)
             agent.critic.optimizer.step()
