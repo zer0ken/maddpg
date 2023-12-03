@@ -1,4 +1,5 @@
 from threading import Thread
+import time
 from tkinter import Frame, Canvas, N, S, E, W, Menu, X, Label, W
 from tkinter import ttk
 from tkinter.simpledialog import askinteger
@@ -68,7 +69,12 @@ class GUI(Frame):
         
         self.env_status = Label(self.statusbar, padx=5, bd=1, relief='sunken', anchor=W,
                                 text=GUI.LITERAL[self.gui_mode])
-        self.env_status.pack(side='left', fill=X, expand=True)
+        self.env_status.pack(side='left', fill=X)
+        
+        self.run_status = Label(self.statusbar, padx=5, bd=1, relief='sunken', anchor=W,
+                                text='학습 환경 입력 중')
+        self.run_status.pack(side='left', fill=X, expand=True)
+        
 
         self.canvas = None
         self.init_with_random_env()
@@ -109,11 +115,11 @@ class GUI(Frame):
         env_menu = Menu(menu, tearoff=0)
         menu.add_cascade(label='설정 모드', menu=env_menu)
         env_menu.add_command(label='장애물/벽 위치 설정', 
-                             command=lambda: self.set_click_mode(GUI.OBSTACLE))
+                             command=lambda: self.set_gui_mode(GUI.OBSTACLE))
         env_menu.add_command(label='청소할 구역 설정',
-                             command=lambda: self.set_click_mode(GUI.DIRTY))
+                             command=lambda: self.set_gui_mode(GUI.DIRTY))
         env_menu.add_command(label='청소기 배치',
-                             command=lambda: self.set_click_mode(GUI.AGENT))
+                             command=lambda: self.set_gui_mode(GUI.AGENT))
         
         reset_menu = Menu(menu, tearoff=0)
         menu.add_cascade(label='초기화', menu=reset_menu)
@@ -127,7 +133,7 @@ class GUI(Frame):
         model_menu = Menu(menu, tearoff=0)
         menu.add_cascade(label='학습', menu=model_menu)
         model_menu.add_command(label='학습 시작',
-                               command=self.start_learn)
+                               command=self. m,.start_learn)
         model_menu.add_command(label='학습 중단',
                                command=self.stop_learn)
         model_menu.add_separator()
@@ -140,7 +146,10 @@ class GUI(Frame):
         
         self.master.config(menu=menu)
 
-    def set_click_mode(self, mode):
+    def set_gui_mode(self, mode):
+        if self.gui_mode == GUI.FIXED:
+            return
+        
         self.gui_mode = mode
         self.env_status.config(text=GUI.LITERAL[self.gui_mode])
         if mode == GUI.AGENT:
@@ -192,6 +201,7 @@ class GUI(Frame):
     def on_canvas_down(self, event):
         if self.gui_mode == GUI.FIXED:
             return
+        
         self.dragging.append((event.x, event.y))
         self.dragging.append((event.x, event.y))
     
@@ -304,7 +314,6 @@ class GUI(Frame):
             new_agents[to].row = to[0]
             new_agents[to].col = to[1]
             new_agents[to].draw()
-            print('agent', i, 'moved to', to)
         self.pos_to_agent = new_agents
             
     def set_map_size(self, row_num=None, col_num=None):
@@ -326,6 +335,8 @@ class GUI(Frame):
     def start_learn(self):
         if self.running_thread is not None:
             return
+        
+        self.gui_mode = GUI.FIXED
         
         if not self.exported_env:
             obstacle_pos = []
@@ -362,9 +373,19 @@ class GUI(Frame):
         self.running_thread.join()
         self.running_thread = None
         
-    def render(self, visited_layer, agents_info):
-        print(visited_layer)
-        print(agents_info)
+    def render(self, steps=None, visited_layer=None, agents_info=None, 
+               visual=None, **kwargs):
+        # TODO update status bar
+        status = []
+        if 'episode' in kwargs:
+            status.append('에피소드 {}'.format(kwargs['episode']))
+        status.append('{} 스텝'.format(steps))
+        
+        self.run_status.config(text=', '.join(status))
+        
+        if visual is None:
+            return
+        
         for row, col in np.argwhere(visited_layer == -1):
             cell = self.pos_to_cell[row, col]
             cell.visited = False

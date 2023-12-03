@@ -59,6 +59,7 @@ class Main:
         self.memory = MultiAgentReplayBuffer(
             1000000, critic_dims, actor_dims, self.n_actions, self.n_agents, 
             batch_size=1024)
+        
         print('preparation done')
     
     def run(self):
@@ -83,9 +84,10 @@ class Main:
                 """ step loop """
                 
                 if self.force_render or self.evaluate or i % self.game_render_period == 0:
-                    self.env.render()
+                    self.env.render(visual=True, episode=self.game_progress, **self.env.get_info())
                     time.sleep(0.1) # to slow down the action for the video
-                    
+                else:
+                    self.env.render(episode=self.game_progress, **self.env.get_info())
                 
                 # random actions
                 actions = [np.array([np.random.rand() for _ in range(self.n_actions)]) for _ in range(self.n_agents)]

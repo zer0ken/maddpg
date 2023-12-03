@@ -46,6 +46,8 @@ class MAACEnv:
         self.agent_layer = -np.ones((self.n_row, self.n_col))
         self.dirty_layer = np.zeros((self.n_row, self.n_col))
         self.visited_layer = -np.ones((self.n_row, self.n_col))
+        
+        self.steps = 0
 
         for i, pos in enumerate(self.agent_pos):
             self.agents[i] = {'idx': i, 'home': pos, 'pos': pos}
@@ -98,13 +100,16 @@ class MAACEnv:
         for i, agent in self.agents.items():
             self.visited_layer[agent['new_pos']] = i
         
-        # TODO: reward, done, info, e.t.c.
-        rewards = []
+        # TODO: evaluate reward, done, e.t.c.
+        observations = [self.get_observation(i) for i in range(self.n_agent)]
+        rewards = [0 for i in range(self.n_agent)]
+        done = [False for i in range(self.n_agent)]
+        info = self.get_info()
         
-        # temp return
-        return [self.get_observation(i) for i in range(self.n_agent)], \
-                [0 for i in range(self.n_agent)], \
-                [False for i in range(self.n_agent)], self.agents
+        # something to do before return goes here
+        self.steps += 1
+
+        return observations, rewards, done, info
 
     def _step_agent(self, agent, action):
         if 'new_pos' in agent:
@@ -158,8 +163,18 @@ class MAACEnv:
         
         return np.concatenate((agent_vision_obstacle, agent_self_layer, other_agent_layer_flatten, dirty_layer_flatten))
         
-    def render(self):
-        self.render_callback(self.visited_layer, self.agents)
+    def get_info(self):
+        # we can use this to render GUI, do debug, and e.t.c. 
+        info = {
+            'steps': self.steps,
+            'agents_info': self.agents,
+            'visited_layer': self.visited_layer,
+            'dirty_layer': self.dirty_layer,
+        }
+        return info
+    
+    def render(self, *args, **kwargs):
+        self.render_callback(*args, **kwargs)
 
     def close(self):
         pass
