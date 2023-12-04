@@ -3,7 +3,7 @@ from tkinter import Tk
 import numpy as np
 from gui import GUI
 from maddpg import MADDPG
-from buffer import MultiAgentReplayBuffer
+from buffer import PERMA, MultiAgentReplayBuffer
 # from make_env import make_env
 from environment import MAACEnv
 import time
@@ -18,7 +18,7 @@ def obs_list_to_state_vector(observation):
 class Main:
     PRINT_INTERVAL = 100
     N_GAMES = 50000
-    MAX_STEPS = 10000
+    MAX_STEPS = 2000
     
     def __init__(self):
         self.env = MAACEnv.import_last_env()
@@ -54,12 +54,13 @@ class Main:
         self.n_actions = self.env.action_space[0].n
         print(self.n_agents, actor_dims, critic_dims, self.n_actions)        
         self.maddpg_agents = MADDPG(actor_dims, critic_dims, self.n_agents, self.n_actions, 
-                                    fc1=64, fc2=64,  
+                                    fc1=512, fc2=256,  
                                     alpha=0.01, beta=0.01, scenario=scenario,
                                     chkpt_dir='.\\tmp\\maddpg\\')
 
         self.memory = MultiAgentReplayBuffer(
-            1000000, critic_dims, actor_dims, self.n_actions, self.n_agents, 
+        # self.memory = PERMA(
+            50000, critic_dims, actor_dims, self.n_actions, self.n_agents, 
             batch_size=1024)
         
         print('preparation done')
@@ -111,13 +112,14 @@ class Main:
                 self.total_steps += 1
                 episode_step += 1
                 
-                if self.force_render or self.evaluate or i % self.game_render_period == 0:
-                    self.env.render(visual=True, episode=self.game_progress, **self.env.get_info())
-                    # time.sleep(0.1) # to slow down the action for the video
-                
                 if self.force_stop:
                     print('force stop')
                     break
+                
+                if self.force_render or self.evaluate or i % self.game_render_period == 0:
+                    self.env.render(visual=True, episode=self.game_progress, **self.env.get_info())
+                    if self.evaluate:
+                        time.sleep(0.1) # to slow down the action for the video
                 
             self.score_history.append(score)
             avg_score = np.mean(self.score_history[-100:])

@@ -31,7 +31,8 @@ class GUI(Frame):
         root.resizable(False, False)
         
         self.main = main
-        self.running_thread = None
+        self.learning_thread = None
+        self.testing_thread = None
         self.exported_env = False
         
         self.grid(row=0,column=0)
@@ -90,6 +91,12 @@ class GUI(Frame):
         self.canvas_height = GUI.CELL_SIZE * self.n_row - 1
         
         self.set_map_size(self.n_row, self.n_col)
+        
+        for agent in self.pos_to_agent.values():
+            agent.erase()
+        
+        self.pos_to_agent = {}
+        self.idx_to_agent = {}
         
         for pos in env.obstacle_pos:
             self.pos_to_cell[pos[0], pos[1]].obstacle = True
@@ -151,7 +158,8 @@ class GUI(Frame):
         
         test_menu = Menu(menu, tearoff=0)
         menu.add_cascade(label='테스트', menu=test_menu)
-        test_menu.add_command(label='테스트 시작')
+        test_menu.add_command(label='테스트 시작',
+                              command=self.start_test)
         test_menu.add_command(label='테스트 중단')
         
         self.master.config(menu=menu)
@@ -343,67 +351,101 @@ class GUI(Frame):
         
         self.init_canvas()
         self.map_status.config(text='{}×{}'.format(self.n_row, self.n_col))
+
+    def prepare(self):
+        obstacle_pos = []
+        dirty_pos = []
+        agent_pos = []
+        for pos, cell in self.pos_to_cell.items():
+            if pos[0] >= self.n_row or pos[1] >= self.n_col:
+                continue
+            if cell.obstacle:
+                obstacle_pos.append((cell.row, cell.col))
+            if cell.dirty:
+                dirty_pos.append((cell.row, cell.col))
+        for pos, agent in self.pos_to_agent.items():
+            if pos[0] >= self.n_row or pos[1] >= self.n_col:
+                continue
+            agent_pos.append(pos)
+            self.idx_to_agent[len(self.idx_to_agent)] = agent
+            
+        env = MAACEnv(n_agent=len(agent_pos), n_row=self.n_row, n_col=self.n_col, 
+                        obstacle_pos=obstacle_pos, dirty_pos=dirty_pos, agent_pos=agent_pos)
+        env.render_callback = self.render
+            
+        self.main.env = env
+        self.main.prepare()
+        self.set_gui_mode(GUI.FIXED)
+        self.exported_env = True
     
     def start_learn(self):
-        if self.running_thread is not None:
+        if self.learning_thread is not None:
             return
+        
+        self.stop_test()
         
         self.set_gui_mode(GUI.FIXED)
         
         if not self.exported_env:
-            obstacle_pos = []
-            dirty_pos = []
-            agent_pos = []
-            for pos, cell in self.pos_to_cell.items():
-                if pos[0] >= self.n_row or pos[1] >= self.n_col:
-                    continue
-                if cell.obstacle:
-                    obstacle_pos.append((cell.row, cell.col))
-                if cell.dirty:
-                    dirty_pos.append((cell.row, cell.col))
-            for pos, agent in self.pos_to_agent.items():
-                if pos[0] >= self.n_row or pos[1] >= self.n_col:
-                    continue
-                agent_pos.append(pos)
-                self.idx_to_agent[len(self.idx_to_agent)] = agent
-            
-            env = MAACEnv(n_agent=len(agent_pos), n_row=self.n_row, n_col=self.n_col, 
-                        obstacle_pos=obstacle_pos, dirty_pos=dirty_pos, agent_pos=agent_pos)
-            env.render_callback = self.render
-            
-            self.main.env = env
-            self.main.prepare()
-            self.set_gui_mode(GUI.FIXED)
-            self.exported_env = True
+            self.prepare()
         
-        self.running_thread = Thread(target=self.main.run, daemon=True)
-        self.running_thread.start()
+        self.main.evaluate = False
+        
+        self.learning_thread = Thread(target=self.main.run, daemon=True)
+        self.learning_thread.start()
         self.env_status.config(text='학습 중...')
         
     def stop_learn(self):
         print('stop learn')
-        if self.running_thread is None:
+        if self.learning_thread is None:
             return
             
         self.env_status.config(text='학습 중단 중...')
         
-        
         print('wait for thread to stop')
         
         self.main.force_stop = True
-        self.running_thread.join()
-        self.running_thread = None
+        self.learning_thread.join()
+        self.learning_thread = None
         self.env_status.config(text='학습 중단됨')
 
     def reset_learn(self):
-        if self.running_thread is not None:
-            self.stop_learn()
+        self.stop_learn()
         
         self.main.env.reset()
         self.init_with_env(self.main.env)
         self.exported_env = False
         self.run_status.config(text='학습 환경 입력 중...')
+        
+        self.gui_mode = None
         self.set_gui_mode(GUI.OBSTACLE)
+    
+    def start_test(self):
+        if self.testing_thread is not None:
+            return
+        
+        self.stop_learn()
+        
+        if not self.exported_env:
+            self.prepare()
+            
+        self.main.evaluate = True
+        
+        self.testing_thread = Thread(target=self.main.run, daemon=True)
+        self.testing_thread.start()
+        self.env_status.config(text='테스트 중...')
+    
+    def stop_test(self):
+        if self.testing_thread is None:
+            return
+        
+        self.env_status.config(text='테스트 중단 중...')
+        
+        self.main.force_stop = True
+        self.testing_thread.join()
+        self.learning_thread = None
+        self.env_status.config(text='학습 중단됨')
+
         
     def render(self, steps=None, visited_layer=None, agents_info=None, 
                visual=None, **kwargs):
@@ -413,7 +455,7 @@ class GUI(Frame):
             status.append('에피소드 {}'.format(kwargs['episode']))
         status.append('{} 스텝'.format(steps))
         
-        self.run_status.config(text=', '.join(status))
+        self.run_status.config(text=' | '.join(status))
         
         if visual is None:
             return

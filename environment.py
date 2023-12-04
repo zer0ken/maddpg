@@ -65,6 +65,14 @@ class MAACEnv:
             self.obstacle_layer = np.zeros((self.n_row, self.n_col))
             for pos in self.obstacle_pos:
                 self.obstacle_layer[pos[0], pos[1]] = 1
+                self.dirty_layer[pos[0], pos[1]] = 0
+                self.agent_layer[pos[0], pos[1]] = -1
+        print('obstacle:\n', self.obstacle_layer)
+        print('dirty:\n', self.dirty_layer)
+        print('agent:\n', self.agent_layer)
+        
+        if not hasattr(self, 'num_dirty'):
+            self.num_dirty = self.dirty_layer.sum()
         
         obs_n = []
         for agent_idx in range(self.n_agent):
@@ -79,7 +87,10 @@ class MAACEnv:
         for i, action_prob in enumerate(actions):
             action = np.argmax(action_prob)
             self._step_agent(self.agents[i], action)
-            rewards[i] -= 1 # 1-step 마다 reward -1
+            if action == 4:
+                rewards[i] -= 0.1
+            else:
+                rewards[i] -= 0.05
 
         """ invalid action check """
         for i, a in self.agents.items():
@@ -87,7 +98,7 @@ class MAACEnv:
                    a['new_pos'][0] < 0, a['new_pos'][0] >= self.n_row,
                    a['new_pos'][1] < 0,a['new_pos'][1] >= self.n_col)):
                 self._rewind_agent(a)
-                rewards[i] -= 1 # 벽, 장애물과 충돌
+                rewards[i] -= 0.5 # 벽, 장애물과 충돌
                      
         collided = set()
         for i, a in self.agents.items():
@@ -101,35 +112,40 @@ class MAACEnv:
                 if a['new_pos'] == b['new_pos']:
                     collided.add(i)
                     collided.add(j)
+
         for i in tuple(collided):
             self._rewind_agent(self.agents[i])
-            rewards[i] -= 1 #충돌한 애들끼리 +1
+            rewards[i] -= 0.5 #충돌한 애들끼리 +1
         
         for i, agent in self.agents.items():
             self.visited_layer[agent['new_pos']] = i
-            if self.dirty_layer[agent['new_pos']] == 1:
-                self.dirty_layer[agent['new_pos']] = 0 
+            
+            if self.dirty_layer[agent['new_pos']] == 1: # 도착한 곳이 더러운 곳이라면 reward +1
+                self.dirty_layer[agent['new_pos']] = 0 # 도착한 곳은 청소 됨
                 rewards[i] +=1 # 청소 했으니까 +1
-        
-        # TODO: evaluate reward, done, e.t.c.
+          
+                if 'covered' not in agent:
+                    agent['covered'] = 1
+                else:
+                    agent['covered'] += 1 
+                
+            # new_pos = agent['new_pos']
+            # vf = self.visual_field//2
+            # rewards[i] += np.sum(self.dirty_layer[new_pos[0]-vf:new_pos[0]+(vf+1), new_pos[1]-vf:new_pos[1]+(vf+1)])
+            
         observations = [self.get_observation(i) for i in range(self.n_agent)]
         done = [False for i in range(self.n_agent)]
         info = self.get_info()
         
-        if np.all(self.dirty_layer == 0):
+        if self.dirty_layer.sum() == 0:
             done = [True for i in range(self.n_agent)]   # 전부 청소되면 done
+            
+            for i, agent in self.agents.items():
+                rewards[i] += agent['covered'] * 200 / self.num_dirty
         
         # something to do before return goes here
         self.steps += 1
-
-        for i, agent in self.agents.items():
-            if self.dirty_layer[agent['new_pos']] == 1: # 도착한 곳이 더러운 곳이라면 reward +1
-                self.dirty_layer[agent['new_pos']] = 0 # 도착한 곳은 청소 됨
-                rewards[i] += 1
-            agent['reward'] = rewards[i]
-        
-        self.done = np.all(self.dirty_layer == 0)   # 전부 청소되면 done
-        
+                
         return observations, rewards, done, info
 
     def _step_agent(self, agent, action):
