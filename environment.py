@@ -125,10 +125,6 @@ class MAACEnv:
                 else:
                     agent['covered'] += 1 
                 
-            # new_pos = agent['new_pos']
-            # vf = self.visual_field//2
-            # rewards[i] += np.sum(self.dirty_layer[new_pos[0]-vf:new_pos[0]+(vf+1), new_pos[1]-vf:new_pos[1]+(vf+1)])
-            
         observations = [self.get_observation(i) for i in range(self.n_agent)]
         done = [False for i in range(self.n_agent)]
         info = self.get_info()

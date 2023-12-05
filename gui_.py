@@ -27,17 +27,15 @@ class GUI(tk.Frame):
         RunStatus.PAUSED: '일시 정지',
     }
     
-    def __init__(self, root, main, n_row=10, n_col=10):
+    def __init__(self, root, main):
         tk.Frame.__init__(self, root)
         root.title('MAAC')
-        root.resizable(False, False)
-        self.grid(row=0, column=0)
-        
+        self.pack(side=tk.TOP, fill=tk.BOTH, expand=True, anchor='center')
+                
         self.main = main
-        self.grid = Grid(self, n_row, n_col, env=main.env)
-        
-        self.n_row = n_row
-        self.n_col = n_col
+        self.n_row = main.env.n_row 
+        self.n_col = main.env.n_col
+        self.grid_ = Grid(self, self.n_row, self.n_col, env=main.env)
         
         self._run_status = GUI.RunStatus.EDITTING_ENV
         
@@ -46,41 +44,41 @@ class GUI(tk.Frame):
         self._init_status()
         self._init_menu()
     
-    def render(self, episodes=None, steps=None, visual=False,
+    def render(self, episodes=None, steps=None, visual=False, fastest_solve=None,
                visited_layer=None, agents_info=None, reset=False, **kwargs):
-        if self.grid.event_mode != Grid.EventMode.BLOCKED:
-            self.grid.update(event_mode=Grid.EventMode.BLOCKED)
+        if self.grid_.event_mode != Grid.EventMode.BLOCKED:
+            self.grid_.update_(event_mode=Grid.EventMode.BLOCKED)
             
-        self.progress_label.config(text=self._get_progress_text(episodes, steps))
+        self.progress_label.config(text=self._get_progress_text(episodes, steps, fastest_solve))
                 
+        if reset:
+            self.grid_.reset()
+            self.grid_.render()
+            
         if not visual:
             return
         
-        if reset:
-            self.grid.reset()
-        
         for visited in np.argwhere(visited_layer!=-1):
-            self.grid.update(pos=tuple(visited), 
+            self.grid_.update_(pos=tuple(visited), 
                              visited=visited_layer[visited[0], visited[1]])
         for idx, agent in agents_info.items():
-            self.grid.update(agent_idx=idx, agent_new_pos=agent['new_pos'])            
+            self.grid_.update_(agent_idx=idx, agent_new_pos=agent['new_pos'])            
 
-        self.grid.render()
+        self.grid_.render()
     
     """ private methods """
     
-    def _update(self, run_status=None, episodes=None, steps=None):
+    def _update_(self, run_status=None):
         if run_status is not None:
             self._run_status = run_status
             self.run_label.config(text=self._get_run_literal())
         self.size_label.config(text=self._get_map_size_text())
         self.event_label.config(text=self._get_event_literal())
-        self.progress_label.config(text=self._get_progress_text(
-            episode=episodes, step=steps))
+        self.progress_label.config(text=self._get_progress_text())
     
     def _init_status(self):
         self.status = tk.Frame(self.master, bd=1, relief=tk.SUNKEN)
-        self.status.grid(row=1, column=0, sticky=(tk.S, tk.E, tk.W))
+        self.status.pack(side=tk.BOTTOM, fill=tk.X)
         
         self.size_label = tk.Label(self.status, text='{}x{}'.format(self.n_row, self.n_col),
                                    padx=5, bd=1, relief=tk.SUNKEN)
@@ -95,7 +93,7 @@ class GUI(tk.Frame):
         self.run_label.pack(side=tk.LEFT, fill=tk.X)
         
         self.progress_label = tk.Label(self.status, text=self._get_progress_text(),
-                                       padx=5, bd=1, relief=tk.SUNKEN)
+                                       padx=5, bd=1, relief=tk.SUNKEN, anchor='w')
         self.progress_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
     def _init_menu(self):
@@ -118,13 +116,13 @@ class GUI(tk.Frame):
         menu.add_cascade(label='설정 모드', menu=env_menu)
         env_menu.add_command(label='장애물/벽 위치 설정', 
                              command=lambda: 
-                                 self.grid.update(event_mode=Grid.EventMode.EDIT_OBSTACLE))
+                                 self.grid_.update_(event_mode=Grid.EventMode.EDIT_OBSTACLE))
         env_menu.add_command(label='청소할 구역 설정',
                              command=lambda: 
-                                 self.grid.update(event_mode=Grid.EventMode.EDIT_DIRTY))
+                                 self.grid_.update_(event_mode=Grid.EventMode.EDIT_DIRTY))
         env_menu.add_command(label='청소기 배치',
                              command=lambda: 
-                                 self.grid.update(event_mode=Grid.EventMode.EDIT_AGENT))
+                                 self.grid_.update_(event_mode=Grid.EventMode.EDIT_AGENT))
         
         reset_menu = tk.Menu(menu, tearoff=0)
         menu.add_cascade(label='초기화', menu=reset_menu)
@@ -135,28 +133,17 @@ class GUI(tk.Frame):
         reset_menu.add_command(label='청소기 배치 초기화',
                              command=lambda: self._clear_agents())
         
-        model_menu = tk.Menu(menu, tearoff=0)
-        menu.add_cascade(label='학습', menu=model_menu)
-        model_menu.add_command(label='학습 시작',
-                               command=self._start_learn)
-        model_menu.add_command(label='학습 중단',
-                               command=self._stop_learn)
-        
-        test_menu = tk.Menu(menu, tearoff=0)
-        menu.add_cascade(label='테스트', menu=test_menu)
-        test_menu.add_command(label='테스트 시작',
-                              command=self._start_test)
-        test_menu.add_command(label='테스트 중단',
-                              command=self._stop_test)
-        
-        menu.add_command(label='학습 데이터 초기화', command=self._reset_learning_data)
+        menu.add_command(label='학습 시작', command=self._start_learn)
+        menu.add_command(label='테스트 시작', command=self._start_test)
+        menu.add_command(label='실행 중단', command=self._stop_task)
+        menu.add_command(label='학습 정보 삭제', command=self._reset_learning_data)
         
         self.master.config(menu=menu)
 
     def _change_map_size(self, n_row, n_col):
-        self.grid.update(n_row=n_row, n_col=n_col)
-        self.grid.render()
-        self._update()
+        self.grid_.update_(n_row=n_row, n_col=n_col)
+        self.grid_.render()
+        self._update_()
     
     def _input_map_size(self):
         row_num = askinteger('', '공간의 높이(행)를 입력하세요. ({} ~ {})'.format(Grid.MIN_MAP, Grid.MAX_MAP))
@@ -164,64 +151,79 @@ class GUI(tk.Frame):
         return {'n_row': row_num, 'n_col': col_num}
     
     def _clear_obstacles(self):
-        for pos in self.grid.get_obstacle_pos():
-            self.grid.update(pos=pos, obstacle=False)
-        self.grid.render()
+        for pos in self.grid_.get_obstacle_pos():
+            self.grid_.update_(pos=pos, obstacle=False)
+        self.grid_.render()
     
     def _clear_dirties(self):
         for row in range(self.n_row):
             for col in range(self.n_col):
                 pos = (row, col)
-                if not self.grid._pos_to_cell[pos].dirty:
-                    self.grid.update(pos=pos, dirty=True)
-        self.grid.render()
+                if not self.grid_._pos_to_cell[pos].dirty:
+                    self.grid_.update_(pos=pos, dirty=True)
+        self.grid_.render()
     
     def _clear_agents(self):
-        for idx, _ in self.grid.get_idx_agent_pairs():
-            self.grid.update(agent_idx=idx, agent_new_pos=None)
-        self.grid.render()
-    
-    def _start_learn(self):
+        for idx, _ in self.grid_.get_idx_agent_pairs():
+            self.grid_.update_(agent_idx=idx, agent_new_pos=None)
+        self.grid_.render()
+
+    def _start_task(self):
         if self._thread is not None:
             return
         
-        self._run_status = GUI.RunStatus.TRAINING
-        
-        if not self.main.prepared:
-            self.main.env = self.grid.export_as_env()
-            self.main.env.render_callback = self.render
-            self.main.env.export()
-            self.main.prepare()
+        self.main.env = self.grid_.export_as_env()
+        self.main.env.render_callback = self.render
+        self.main.env.export()
+        self.main.prepare()
             
         self.main.evaluate = False
         self._thread = Thread(target=self.main.run, daemon=True)
         self._thread.start()
     
-    def _stop_learn(self):
-        pass
+    def _start_learn(self):
+        self._run_status = GUI.RunStatus.TRAINING
+        self.main.evaluate = False
+        self._start_task()
     
     def _start_test(self):
-        pass
+        self._run_status = GUI.RunStatus.TESTING
+        self.main.evaluate = True
+        self._start_task()
     
-    def _stop_test(self):
-        pass
+    def _stop_task(self):
+        if self._thread is None:
+            return
+        self._run_status = GUI.RunStatus.PAUSED
+        
+        self.main.force_stop = True
+        self._thread = None
     
     def _reset_learning_data(self):
-        pass
+        self._stop_task()
+        
+        self.main.env = self.grid_.export_as_env()
+        self.main.env.render_callback = self.render
+        self.main.env.export()
+        self.main.prepare()
+        
+        self.main.save_checkpoint()
     
     def _get_map_size_text(self):
         return '{}x{}'.format(self.n_row, self.n_col)
     
-    def _get_progress_text(self, episode=None, step=None):
+    def _get_progress_text(self, episode=None, step=None, fast_solve=None):
         if episode is None:
             return '학습 준비 중'
         text = '에피소드: {}'.format(episode)
         if step is not None:
             text += ' | 스텝: {}'.format(step)
+        if fast_solve is not None:
+            text += ' | 최단 에피소드: {} 스텝'.format(fast_solve)
         return text
     
     def _get_event_literal(self):
-        return Grid._MODE_LITERAL[self.grid.event_mode]
+        return Grid._MODE_LITERAL[self.grid_.event_mode]
     
     def _get_run_literal(self):
         return GUI._RUN_LITERAL[self._run_status]
@@ -254,7 +256,8 @@ class Grid(tk.Frame):
     
     def __init__(self, master, n_row, n_col, env=None):
         tk.Frame.__init__(self, master)
-        self.grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        self.pack(side=tk.TOP, fill=tk.BOTH, expand=True, anchor='center', 
+                          padx=5, pady=5)
         
         self.n_row = min(max(Grid.MIN_MAP, n_row), Grid.MAX_MAP)
         self.n_col = min(max(Grid.MIN_MAP, n_col), Grid.MAX_MAP)
@@ -264,7 +267,7 @@ class Grid(tk.Frame):
         self._canvas = tk.Canvas(self, bg='white', cursor=self._get_cursor(), 
                                  width=self._get_canvas_width(), 
                                  height=self._get_canvas_height())
-        self._canvas.grid(row=0, column=0)
+        self._canvas.pack(side=tk.TOP)
         self._canvas.bind('<Button-1>', self._on_mouse_down)
         self._canvas.bind('<B1-Motion>', self._on_mouse_drag)
         self._canvas.bind('<ButtonRelease-1>', self._on_mouse_up)
@@ -279,11 +282,11 @@ class Grid(tk.Frame):
         self._idx_to_agent = {} # {idx: ColoredAgent()}
         
         if env is not None:
-            self.update(n_row=env.n_row, n_col=env.n_col)
+            self.update_(n_row=env.n_row, n_col=env.n_col)
             for pos in env.obstacle_pos:
-                self.update(pos=tuple(pos), obstacle=True)
+                self.update_(pos=tuple(pos), obstacle=True)
             for pos in env.dirty_pos:
-                self.update(pos=tuple(pos), dirty=True)
+                self.update_(pos=tuple(pos), dirty=True)
             for idx, pos in enumerate(env.agent_pos):
                 agent = ColoredAgent(self._canvas, *tuple(pos))
                 self._pos_to_agent[tuple(pos)] = agent
@@ -318,7 +321,7 @@ class Grid(tk.Frame):
                 if pos in self._pos_to_agent:
                     self._pos_to_agent[pos].render()
     
-    def update(self, event_mode=None,
+    def update_(self, event_mode=None,
                n_row=None, n_col=None, 
                pos=None, obstacle=None, dirty=None, visited=None, 
                agent_idx=None, agent_new_pos=None):
@@ -342,13 +345,14 @@ class Grid(tk.Frame):
 
         if pos is not None:
             if obstacle is not None:
-                self._pos_to_cell[pos].update(obstacle=obstacle)
+                self._pos_to_cell[pos].update_(obstacle=obstacle)
             if dirty is not None:
-                self._pos_to_cell[pos].update(dirty=dirty)
+                self._pos_to_cell[pos].update_(dirty=dirty)
             if visited is not None:
-                self._pos_to_cell[pos].update(visited=self._idx_to_agent[visited])
+                self._pos_to_cell[pos].update_(visited=self._idx_to_agent[visited])
             if agent_new_pos is not None:
-                self._pos_to_agent[pos].update(new_pos=agent_new_pos)
+                self._pos_to_agent[pos].update_(new_pos=agent_new_pos)
+                self._pos_to_agent[agent_new_pos] = self._pos_to_agent.pop(pos)
 
         if agent_idx is not None:
             if agent_new_pos is None:
@@ -356,7 +360,7 @@ class Grid(tk.Frame):
                 agent.render(erase=True)
                 self._pos_to_agent.pop((agent.row, agent.col))
             else:
-                self._idx_to_agent[agent_idx].update(new_pos=agent_new_pos)
+                self._idx_to_agent[agent_idx].update_(new_pos=agent_new_pos)
         
         # self.render()
         
@@ -453,7 +457,7 @@ class Grid(tk.Frame):
                         self._pos_to_agent[pos] = agent
                 elif pos in self._pos_to_agent and new_pos not in self._pos_to_agent:
                     updated = True
-                    self._pos_to_agent[pos].update(new_pos=new_pos)
+                    self._pos_to_agent[pos].update_(new_pos=new_pos)
                     self._pos_to_agent[new_pos] = self._pos_to_agent.pop(pos)
 
                 if updated:
@@ -468,9 +472,9 @@ class Grid(tk.Frame):
                     continue
                 if self.event_mode == Grid.EventMode.EDIT_OBSTACLE \
                     and (cell.row, cell.col) not in self._pos_to_agent:
-                    cell.update(obstacle=not cell.obstacle)
+                    cell.update_(obstacle=not cell.obstacle)
                 elif self.event_mode == Grid.EventMode.EDIT_DIRTY:
-                    cell.update(dirty=not cell.dirty)
+                    cell.update_(dirty=not cell.dirty)
                     
         self.render()
         
@@ -532,12 +536,11 @@ class ColoredAgent:
         top = self.row * Grid.CELL_SIZE + 2 + 4
         right = (self.col + 1) * Grid.CELL_SIZE - 4
         bottom = (self.row + 1) * Grid.CELL_SIZE - 4
-        if self._oval is None:
-            self._oval = self.canvas.create_oval(left, top, right, bottom, fill=self.color, width=2)
-        else:
-            self.canvas.coords(self._oval, left, top, right, bottom)
+        if self._oval is not None:
+            self.canvas.delete(self._oval)
+        self._oval = self.canvas.create_oval(left, top, right, bottom, fill=self.color, width=2)
     
-    def update(self, new_pos=None):
+    def update_(self, new_pos=None):
         if new_pos is not None:
             self.row, self.col = new_pos
     
@@ -563,11 +566,14 @@ class Cell:
     def reset(self):
         self.updated = True
         
-        self.obstacle = False
-        self.dirty = True
         self.visited = None
         
-        self._fill = None
+        if self.obstacle:
+            self._fill = Cell.OBSTACLE_COLOR
+        elif self.dirty:
+            self._fill = Cell.DIRTY_COLOR
+        else:
+            self._fill = Cell.EMPTY_COLOR
     
     def render(self, erase=False):
         self.updated = False
@@ -586,7 +592,7 @@ class Cell:
         else:
             self.canvas.itemconfig(self.rect, fill=self._fill)
     
-    def update(self, obstacle=None, dirty=None, visited: ColoredAgent=None):
+    def update_(self, obstacle=None, dirty=None, visited: ColoredAgent=None):
         self.updated = True
         
         if obstacle is not None:

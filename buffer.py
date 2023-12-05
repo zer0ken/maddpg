@@ -104,7 +104,7 @@ class PERMA:
         self.n_actions = n_actions
 
         self.priorities = np.zeros(self.mem_size)
-        self.phi = 0.01 # soft mixing factor
+        self.phi = 0.05 # soft mixing factor
 
         self.state_memory = np.zeros((self.mem_size, critic_dims))
         self.new_state_memory = np.zeros((self.mem_size, critic_dims))
