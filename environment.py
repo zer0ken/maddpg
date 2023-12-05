@@ -22,14 +22,15 @@ class MAACEnv:
             
             if obstacle_pos is None:
                 picked = np.random.choice(len(indices), self.n_row * self.n_col // 10, replace=False)
-                self.obstacle_pos = indices[picked, :]
+                self.obstacle_pos = list(map(tuple,  indices[picked, :]))
                 indices = np.delete(indices, picked, axis=0)
                 
             if dirty_pos is None:
-                self.dirty_pos = indices
-            
+                self.dirty_pos = list(map(tuple, indices))
+
             if agent_pos is None:
-                self.agent_pos = indices[np.random.choice(len(indices), self.n_agent, replace=False)]
+                self.agent_pos = list(map(tuple, indices[np.random.choice(
+                    len(indices), self.n_agent, replace=False)]))
 
         self.visual_field = 3
         
@@ -53,7 +54,7 @@ class MAACEnv:
         self.steps = 0
 
         for i, pos in enumerate(self.agent_pos):
-            self.agents[i] = {'idx': i, 'home': pos, 'pos': pos}
+            self.agents[i] = {'idx': i, 'home': pos, 'pos': pos, 'new_pos': pos}
             self.agent_layer[pos[0], pos[1]] = i
             self.visited_layer[pos[0], pos[1]] = i
 
@@ -66,6 +67,9 @@ class MAACEnv:
             self.obstacle_layer = np.zeros((self.n_row, self.n_col))
             for pos in self.obstacle_pos:
                 self.obstacle_layer[pos[0], pos[1]] = 1
+                
+        if not hasattr(self, 'num_dirty'):
+            self.num_dirty = self.dirty_layer.sum()
         
         obs_n = []
         for agent_idx in range(self.n_agent):
@@ -73,14 +77,14 @@ class MAACEnv:
         return obs_n
 
     def step(self, actions):
-        if not self.exported:
-            self.export()
-        
         rewards = [0 for i in range(self.n_agent)]
         for i, action_prob in enumerate(actions):
             action = np.argmax(action_prob)
             self._step_agent(self.agents[i], action)
-            rewards[i] -= 1 # 1-step 마다 reward -1
+            if action == 4:
+                rewards[i] -= 0.1
+            else:
+                rewards[i] -= 0.05
 
         """ invalid action check """
         for i, a in self.agents.items():
@@ -88,7 +92,7 @@ class MAACEnv:
                    a['new_pos'][0] < 0, a['new_pos'][0] >= self.n_row,
                    a['new_pos'][1] < 0,a['new_pos'][1] >= self.n_col)):
                 self._rewind_agent(a)
-                rewards[i] -= 1 # 벽, 장애물과 충돌
+                rewards[i] -= 0.5 # 벽, 장애물과 충돌
                      
         collided = set()
         for i, a in self.agents.items():
@@ -102,35 +106,36 @@ class MAACEnv:
                 if a['new_pos'] == b['new_pos']:
                     collided.add(i)
                     collided.add(j)
+
         for i in tuple(collided):
             self._rewind_agent(self.agents[i])
-            rewards[i] -= 1 #충돌한 애들끼리 +1
+            rewards[i] -= 0.5 #충돌한 애들끼리 +1
         
         for i, agent in self.agents.items():
             self.visited_layer[agent['new_pos']] = i
-            if self.dirty_layer[agent['new_pos']] == 1:
-                self.dirty_layer[agent['new_pos']] = 0 
+            
+            if self.dirty_layer[agent['new_pos']] == 1: # 도착한 곳이 더러운 곳이라면 reward +1
+                self.dirty_layer[agent['new_pos']] = 0 # 도착한 곳은 청소 됨
                 rewards[i] +=1 # 청소 했으니까 +1
-        
-        # TODO: evaluate reward, done, e.t.c.
+          
+                if 'covered' not in agent:
+                    agent['covered'] = 1
+                else:
+                    agent['covered'] += 1 
+                
         observations = [self.get_observation(i) for i in range(self.n_agent)]
         done = [False for i in range(self.n_agent)]
         info = self.get_info()
         
-        if np.all(self.dirty_layer == 0):
+        if self.dirty_layer.sum() == 0:
             done = [True for i in range(self.n_agent)]   # 전부 청소되면 done
+            
+            for i, agent in self.agents.items():
+                rewards[i] += agent['covered'] * 200 / self.num_dirty
         
         # something to do before return goes here
         self.steps += 1
-
-        for i, agent in self.agents.items():
-            if self.dirty_layer[agent['new_pos']] == 1: # 도착한 곳이 더러운 곳이라면 reward +1
-                self.dirty_layer[agent['new_pos']] = 0 # 도착한 곳은 청소 됨
-                rewards[i] += 1
-            agent['reward'] = rewards[i]
-        
-        self.done = np.all(self.dirty_layer == 0)   # 전부 청소되면 done
-        
+                
         return observations, rewards, done, info
 
     def _step_agent(self, agent, action):
@@ -202,21 +207,25 @@ class MAACEnv:
         pass
     
     def export(self):
-        np.array([self.n_agent, self.n_row, self.n_col]).tofile('./last_env/args.dat')
-        np.array(self.agent_pos).tofile('./last_env/agent_pos.dat')
-        np.array(self.dirty_pos).tofile('./last_env/dirty_pos.dat')
-        np.array(self.obstacle_pos).tofile('./last_env/obstacle_pos.dat')
+        np.array([self.n_agent, self.n_row, self.n_col]).tofile('./last_env/args.csv', sep=',')
+        np.array(self.agent_pos).tofile('./last_env/agent_pos.csv', sep=',')
+        np.array(self.dirty_pos).tofile('./last_env/dirty_pos.csv', sep=',')
+        np.array(self.obstacle_pos).tofile('./last_env/obstacle_pos.csv', sep=',')
         
         self.exported = True
     
     def import_last_env():
-        if not os.path.exists('./last_env/args.dat'):
+        if not os.path.exists('./last_env/args.csv'):
             return None
         
-        args = np.fromfile('./last_env/args.dat', dtype=np.int32)
-        agent_pos = np.fromfile('./last_env/agent_pos.dat', dtype=np.int32).reshape(args[0], 2)
-        dirty_pos = np.fromfile('./last_env/dirty_pos.dat', dtype=np.int32).reshape(-1, 2)
-        obstacle_pos = np.fromfile('./last_env/obstacle_pos.dat', dtype=np.int32).reshape(-1, 2)
+        args = np.fromfile('./last_env/args.csv', sep=', ', 
+                           dtype=np.int32)
+        agent_pos = np.fromfile('./last_env/agent_pos.csv', sep=', ', 
+                                dtype=np.int32).reshape(args[0], 2)
+        dirty_pos = np.fromfile('./last_env/dirty_pos.csv', sep=', ', 
+                                dtype=np.int32).reshape(-1, 2)
+        obstacle_pos = np.fromfile('./last_env/obstacle_pos.csv', sep=', ', 
+                                   dtype=np.int32).reshape(-1, 2)
         
         return MAACEnv(*args, agent_pos=list(map(tuple, agent_pos)), 
                        dirty_pos=list(map(tuple, dirty_pos)), 

@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class MultiAgentReplayBuffer:
     def __init__(self, max_size, critic_dims, actor_dims, 
             n_actions, n_agents, batch_size):
@@ -14,7 +15,7 @@ class MultiAgentReplayBuffer:
         self.new_state_memory = np.zeros((self.mem_size, critic_dims))
         self.reward_memory = np.zeros((self.mem_size, n_agents))
         self.terminal_memory = np.zeros((self.mem_size, n_agents), dtype=bool)
-
+        
         self.init_actor_memory()
 
     def init_actor_memory(self):
@@ -33,17 +34,6 @@ class MultiAgentReplayBuffer:
 
     def store_transition(self, raw_obs, state, action, reward, 
                                raw_obs_, state_, done):
-        # this introduces a bug: if we fill up the memory capacity and then
-        # zero out our actor memory, the critic will still have memories to access
-        # while the actor will have nothing but zeros to sample. Obviously
-        # not what we intend.
-        # In reality, there's no problem with just using the same index
-        # for both the actor and critic states. I'm not sure why I thought
-        # this was necessary in the first place. Sorry for the confusion!
-
-        #if self.mem_cntr % self.mem_size == 0 and self.mem_cntr > 0:
-        #    self.init_actor_memory()
-        
         index = self.mem_cntr % self.mem_size
 
         for agent_idx in range(self.n_agents):
@@ -55,6 +45,7 @@ class MultiAgentReplayBuffer:
         self.new_state_memory[index] = state_
         self.reward_memory[index] = reward
         self.terminal_memory[index] = done
+                
         self.mem_cntr += 1
 
     def sample_buffer(self):

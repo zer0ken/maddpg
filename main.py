@@ -1,10 +1,8 @@
-import threading
-from tkinter import Tk
+import tkinter as tk
 import numpy as np
 from gui import GUI
 from maddpg import MADDPG
 from buffer import MultiAgentReplayBuffer
-# from make_env import make_env
 from environment import MAACEnv
 import time
 
@@ -18,13 +16,13 @@ def obs_list_to_state_vector(observation):
 class Main:
     PRINT_INTERVAL = 100
     N_GAMES = 50000
-    MAX_STEPS = 10000
+    MAX_STEPS = 2000
     
     def __init__(self):
         self.env = MAACEnv.import_last_env()
         if self.env is None:
             self.env = MAACEnv()
-    
+        
         # configs
         self.evaluate = False
         self.load_chkpt = True
@@ -38,6 +36,8 @@ class Main:
     def prepare(self):
         scenario = '{}_agent_{}_by_{}'.format(self.env.n_agent, self.env.n_row, self.env.n_col)
         print('preparing scenario:', scenario)
+        
+        self.game_progress = 0
         
         self.total_steps = 0
         self.score_history = []
@@ -59,7 +59,7 @@ class Main:
                                     chkpt_dir='.\\tmp\\maddpg\\')
 
         self.memory = MultiAgentReplayBuffer(
-            1000000, critic_dims, actor_dims, self.n_actions, self.n_agents, 
+            100_000, critic_dims, actor_dims, self.n_actions, self.n_agents, 
             batch_size=1024)
         
         print('preparation done')
@@ -94,7 +94,7 @@ class Main:
                 state_ = obs_list_to_state_vector(obs_)
 
                 if all(done):
-                    self.fastest_solve = min(self.fastest_solve, episode_step)
+                    self.fastest_solve = min(self.fastest_solve, episode_step + 1)
 
                 if episode_step >= Main.MAX_STEPS:
                     done = [True]*self.n_agents
@@ -111,14 +111,15 @@ class Main:
                 self.total_steps += 1
                 episode_step += 1
                 
-                if self.force_render or self.evaluate or i % self.game_render_period == 0:
-                    self.env.render(visual=True, episode=self.game_progress, **self.env.get_info())
-                    # time.sleep(0.1) # to slow down the action for the video
-                
                 if self.force_stop:
                     print('force stop')
                     break
                 
+                if self.force_render or self.evaluate or i % self.game_render_period == 0:
+                    self.env.render(visual=True, episodes=self.game_progress, 
+                                    fastest_solve=self.fastest_solve, **self.env.get_info())
+                    if self.evaluate:
+                        time.sleep(0.1) # to slow down the action for the video
             self.score_history.append(score)
             avg_score = np.mean(self.score_history[-100:])
             
@@ -130,12 +131,14 @@ class Main:
             if i % self.PRINT_INTERVAL == 0 and i > 0:
                 print('episode', i, 'average score {:.1f}'.format(avg_score))
                 
+            self.env.render(episodes=self.game_progress, reset=True, 
+                            fastest_solve=self.fastest_solve, **self.env.get_info())
+            
             if self.force_stop:
                 self.save_checkpoint()
                 self.force_stop = False
                 break
             
-            self.env.render(episode=self.game_progress, **self.env.get_info())
             
         self.force_render = False
             
@@ -145,6 +148,7 @@ class Main:
         self.maddpg_agents.save_checkpoint()
 
 if __name__ == '__main__':
-    tk = Tk()
-    gui = GUI(tk, Main())
-    tk.mainloop()
+    root = tk.Tk()
+    main = Main()
+    gui = GUI(root, main)
+    gui.mainloop()

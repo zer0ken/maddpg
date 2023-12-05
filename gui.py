@@ -1,477 +1,515 @@
-from threading import Thread
-from tkinter import Frame, Canvas, N, S, E, W, Menu, X, Label, W
-from tkinter import ttk
-from tkinter.simpledialog import askinteger
-
 import random
+from enum import Enum, auto
+from threading import Thread
+
+import tkinter as tk
+from tkinter.simpledialog import askinteger
 
 import numpy as np
 
 from colors import AGENT_COLORS
 from environment import MAACEnv
+class Grid:
+    pass
 
-class GUI(Frame):
-    OBSTACLE = 0
-    DIRTY = 1
-    AGENT = 2
-    FIXED = 3
+class GUI(tk.Frame):
+    class RunStatus(Enum):
+        EDITTING_ENV = auto()
+        TRAINING = auto()
+        PAUSED = auto()
+        TESTING = auto()
     
-    LITERAL = {
-        OBSTACLE: '장애물/벽 위치 설정',
-        DIRTY: '청소할 구역 설정',
-        AGENT: '청소기 배치',
-        FIXED: '학습 준비 중...'
+    _RUN_LITERAL = {
+        RunStatus.EDITTING_ENV: '환경 설정',
+        RunStatus.TRAINING: '학습 중',
+        RunStatus.PAUSED: '일시 정지',
     }
     
-    CELL_SIZE = 50
-    
-    def __init__(self, root, main, row_num=10, col_num=10):
-        Frame.__init__(self, root)
-        root.title("MAAC")
-        root.resizable(False, False)
-        
+    def __init__(self, root, main):
+        tk.Frame.__init__(self, root)
+        root.title('MAAC')
+        self.pack(side=tk.TOP, fill=tk.BOTH, expand=True, anchor='center')
+                
         self.main = main
-        self.running_thread = None
-        self.exported_env = False
+        self.n_row = main.env.n_row 
+        self.n_col = main.env.n_col
+        self.grid_ = Grid(self, self.n_row, self.n_col, env=main.env)
         
-        self.grid(row=0,column=0)
+        self._run_status = GUI.RunStatus.EDITTING_ENV
         
-        self.rect_to_cell = {}
-        self.pos_to_cell = {}
-        self.pos_to_agent = {}
-        self.idx_to_agent = {}
+        self._thread = None
         
-        self.n_row = row_num
-        self.n_col = col_num
+        self._init_status()
+        self._init_menu()
+    
+    def render(self, episodes=None, steps=None, visual=False, fastest_solve=None,
+               visited_layer=None, agents_info=None, reset=False, **kwargs):
+        if self.grid_.event_mode != Grid.EventMode.BLOCKED:
+            self.grid_.update_(event_mode=Grid.EventMode.BLOCKED)
+            
+        self.progress_label.config(text=self._get_progress_text(episodes, steps, fastest_solve))
+                
+        if reset:
+            self.grid_.reset()
+            self.grid_.render()
+            
+        if not visual:
+            return
         
-        self.canvas_width = GUI.CELL_SIZE * self.n_col - 1
-        self.canvas_height = GUI.CELL_SIZE * self.n_row - 1
-        
-        self.dragging = []
-        self.dragging_rect = None
-        self.dragging_line = None
-        
-        self.gui_mode = GUI.OBSTACLE
-        
-        self.map_btn = None
-        self.obstacle_btn = None
-        self.dirty_btn = None
-        self.agent_btn = None
-        self.map_input = None
-        self.init_menu()
-        
-        self.statusbar = Frame(root, bd=1, relief='sunken')
-        self.statusbar.grid(row=1, column=0, sticky=(S, E, W))
-        
-        self.map_status = Label(self.statusbar, padx=5, bd=1, relief='sunken', anchor=W, 
-                                text='{}×{}'.format(self.n_row, self.n_col))
-        self.map_status.pack(side='left')
-        
-        self.env_status = Label(self.statusbar, padx=5, bd=1, relief='sunken', anchor=W,
-                                text=GUI.LITERAL[self.gui_mode])
-        self.env_status.pack(side='left', fill=X)
-        
-        self.run_status = Label(self.statusbar, padx=5, bd=1, relief='sunken', anchor=W,
-                                text='학습 환경 입력 중...')
-        self.run_status.pack(side='left', fill=X, expand=True)
-        
+        for visited in np.argwhere(visited_layer!=-1):
+            self.grid_.update_(pos=tuple(visited), 
+                             visited=visited_layer[visited[0], visited[1]])
+        for idx, agent in agents_info.items():
+            self.grid_.update_(agent_idx=idx, agent_new_pos=agent['new_pos'])            
 
-        self.canvas = None
-        self.init_with_env(self.main.env)
+        self.grid_.render()
+    
+    """ private methods """
+    
+    def _update_(self, run_status=None):
+        if run_status is not None:
+            self._run_status = run_status
+            self.run_label.config(text=self._get_run_literal())
+        self.size_label.config(text=self._get_map_size_text())
+        self.event_label.config(text=self._get_event_literal())
+        self.progress_label.config(text=self._get_progress_text())
+    
+    def _init_status(self):
+        self.status = tk.Frame(self.master, bd=1, relief=tk.SUNKEN)
+        self.status.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        self.size_label = tk.Label(self.status, text='{}x{}'.format(self.n_row, self.n_col),
+                                   padx=5, bd=1, relief=tk.SUNKEN)
+        self.size_label.pack(side=tk.LEFT, fill=tk.X)
+        
+        self.event_label = tk.Label(self.status, text=self._get_event_literal(),
+                                   padx=5, bd=1, relief=tk.SUNKEN)
+        self.event_label.pack(side=tk.LEFT, fill=tk.X)
+        
+        self.run_label = tk.Label(self.status, text=self._get_run_literal(),
+                                   padx=5, bd=1, relief=tk.SUNKEN)
+        self.run_label.pack(side=tk.LEFT, fill=tk.X)
+        
+        self.progress_label = tk.Label(self.status, text=self._get_progress_text(),
+                                       padx=5, bd=1, relief=tk.SUNKEN, anchor='w')
+        self.progress_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-    def init_with_env(self, env=None):
-        if env is None:
-            env = MAACEnv()
+    def _init_menu(self):
+        menu = tk.Menu(self.master)
         
-        self.n_row = env.n_row
-        self.n_col = env.n_col
-        
-        self.canvas_width = GUI.CELL_SIZE * self.n_col - 1
-        self.canvas_height = GUI.CELL_SIZE * self.n_row - 1
-        
-        self.set_map_size(self.n_row, self.n_col)
-        
-        for pos in env.obstacle_pos:
-            self.pos_to_cell[pos[0], pos[1]].obstacle = True
-            self.pos_to_cell[pos[0], pos[1]].draw()
-        
-        for pos in env.dirty_pos:
-            self.pos_to_cell[pos[0], pos[1]].dirty = True
-            self.pos_to_cell[pos[0], pos[1]].draw()
-        
-        for pos in env.agent_pos:
-            pos = tuple(pos)
-            if pos not in self.pos_to_agent:
-                self.add_agent(pos)
-        
-        for row in range(self.n_row):
-            for col in range(self.n_col):
-                cell = self.pos_to_cell[row, col]
-                cell.visited = False
-                cell.draw()
-
-    def init_menu(self):
-        menu = Menu(self.master)
-        
-        map_menu = Menu(menu, tearoff=0)
-        menu.add_cascade(label='공간', menu=map_menu)
-        map_menu.add_command(label='5x5', command=lambda: self.set_map_size(5,5))
-        map_menu.add_command(label='10x10', command=lambda: self.set_map_size(10,10))
-        map_menu.add_command(label='15x15', command=lambda: self.set_map_size(15,15))
+        map_menu = tk.Menu(menu, tearoff=0)
+        menu.add_cascade(label='맵 크기', menu=map_menu)
+        map_menu.add_command(label='5x5', 
+                             command=lambda: self._change_map_size(5, 5))
+        map_menu.add_command(label='10x10', 
+                             command=lambda: self._change_map_size(10, 10))
+        map_menu.add_command(label='15x15', 
+                             command=lambda: self._change_map_size(15, 15))
         map_menu.add_separator()
-        map_menu.add_command(label='직접 입력', command=self.set_map_size)
+        map_menu.add_command(label='직접 입력', 
+                             command=lambda: self._change_map_size(
+                                 **self._input_map_size()))
         
-        env_menu = Menu(menu, tearoff=0)
+        env_menu = tk.Menu(menu, tearoff=0)
         menu.add_cascade(label='설정 모드', menu=env_menu)
         env_menu.add_command(label='장애물/벽 위치 설정', 
-                             command=lambda: self.set_gui_mode(GUI.OBSTACLE))
+                             command=lambda: 
+                                 self.grid_.update_(event_mode=Grid.EventMode.EDIT_OBSTACLE))
         env_menu.add_command(label='청소할 구역 설정',
-                             command=lambda: self.set_gui_mode(GUI.DIRTY))
+                             command=lambda: 
+                                 self.grid_.update_(event_mode=Grid.EventMode.EDIT_DIRTY))
         env_menu.add_command(label='청소기 배치',
-                             command=lambda: self.set_gui_mode(GUI.AGENT))
+                             command=lambda: 
+                                 self.grid_.update_(event_mode=Grid.EventMode.EDIT_AGENT))
         
-        reset_menu = Menu(menu, tearoff=0)
+        reset_menu = tk.Menu(menu, tearoff=0)
         menu.add_cascade(label='초기화', menu=reset_menu)
         reset_menu.add_command(label='장애물/벽 초기화',
-                               command=lambda: self.remove_all(GUI.OBSTACLE))
+                               command=lambda: self._clear_obstacles())
         reset_menu.add_command(label='청소할 구역 초기화',
-                               command=lambda: self.remove_all(GUI.DIRTY))
+                               command=lambda: self._clear_dirties())
         reset_menu.add_command(label='청소기 배치 초기화',
-                             command=lambda: self.remove_all(GUI.AGENT))
+                             command=lambda: self._clear_agents())
         
-        model_menu = Menu(menu, tearoff=0)
-        menu.add_cascade(label='학습', menu=model_menu)
-        model_menu.add_command(label='학습 시작',
-                               command=self.start_learn)
-        model_menu.add_command(label='학습 중단',
-                               command=self.stop_learn)
-        model_menu.add_separator()
-        model_menu.add_command(label='학습 초기화',
-                               command=self.reset_learn)
-        
-        test_menu = Menu(menu, tearoff=0)
-        menu.add_cascade(label='테스트', menu=test_menu)
-        test_menu.add_command(label='테스트 시작')
-        test_menu.add_command(label='테스트 중단')
+        menu.add_command(label='학습 시작', command=self._start_learn)
+        menu.add_command(label='테스트 시작', command=self._start_test)
+        menu.add_command(label='실행 중단', command=self._stop_task)
+        menu.add_command(label='학습 정보 삭제', command=self._reset_learning_data)
         
         self.master.config(menu=menu)
 
-    def set_gui_mode(self, mode):
-        if self.gui_mode == GUI.FIXED:
-            return
-        
-        self.gui_mode = mode
-        self.env_status.config(text=GUI.LITERAL[self.gui_mode])
-        if mode == GUI.FIXED:
-            self.canvas.config(cursor='arrow')
-        elif mode == GUI.AGENT:
-            self.canvas.config(cursor='arrow')
-        else:
-            self.canvas.config(cursor='crosshair')
+    def _change_map_size(self, n_row, n_col):
+        self.grid_.update_(n_row=n_row, n_col=n_col)
+        self.grid_.render()
+        self._update_()
     
-    def remove_all(self, target):
-        if self.gui_mode == GUI.FIXED:
-            return
-        if target == GUI.AGENT:
-            for agent in self.pos_to_agent.values():
-                agent.erase()
-            self.pos_to_agent.clear()
-            return
-        for cell in self.pos_to_cell.values():
-            if target == GUI.OBSTACLE:
-                cell.obstacle = False
-            elif target == GUI.DIRTY:
-                cell.dirty = False
-            cell.draw()
+    def _input_map_size(self):
+        row_num = askinteger('', '공간의 높이(행)를 입력하세요. ({} ~ {})'.format(Grid.MIN_MAP, Grid.MAX_MAP))
+        col_num = askinteger('', '공간의 넓이(열)를 입력하세요. ({} ~ {})'.format(Grid.MIN_MAP, Grid.MAX_MAP))
+        return {'n_row': row_num, 'n_col': col_num}
     
-    def init_canvas(self):
-        if self.canvas is None:
-            canvas_frame = ttk.Frame(self, padding=(5,5,5,5))
-            canvas_frame.grid(column=0, row=0, sticky=(N, S, E, W))
-            canvas = Canvas(canvas_frame, 
-                            width=self.canvas_width, height=self.canvas_height,
-                            bg='white', cursor='crosshair')
-            canvas.grid(column=0, row=0)
-            canvas.bind('<ButtonRelease-1>', self.on_canvas_up)
-            canvas.bind('<B1-Motion>', self.on_canvas_drag)
-            canvas.bind('<Button-1>', self.on_canvas_down)
-        else:
-            canvas = self.canvas
-            canvas.config(width=self.canvas_width, height=self.canvas_height)
-
+    def _clear_obstacles(self):
+        for pos in self.grid_.get_obstacle_pos():
+            self.grid_.update_(pos=pos, obstacle=False)
+        self.grid_.render()
+    
+    def _clear_dirties(self):
         for row in range(self.n_row):
             for col in range(self.n_col):
-                if (row, col) in self.pos_to_cell:
-                    self.pos_to_cell[(row, col)].draw()
-                    continue
-                cell = Cell(canvas, row, col)
-                self.pos_to_cell[row, col] = cell
-                self.rect_to_cell[cell.rect] = cell
-        
-        self.canvas = canvas
-
-    def on_canvas_down(self, event):
-        if self.gui_mode == GUI.FIXED:
-            return
-        
-        self.dragging.append((event.x, event.y))
-        self.dragging.append((event.x, event.y))
+                pos = (row, col)
+                if not self.grid_._pos_to_cell[pos].dirty:
+                    self.grid_.update_(pos=pos, dirty=True)
+        self.grid_.render()
     
-    def on_canvas_drag(self, event):
-        if self.gui_mode == GUI.FIXED:
+    def _clear_agents(self):
+        for idx, _ in self.grid_.get_idx_agent_pairs():
+            self.grid_.update_(agent_idx=idx, agent_new_pos=None)
+        self.grid_.render()
+
+    def _start_task(self):
+        if self._thread is not None:
             return
         
-        if self.dragging:
-            self.dragging[-1] = (event.x, event.y)
-        if self.gui_mode == GUI.AGENT:
-            if self.dragging_line is None:
-                self.dragging_line = self.canvas.create_line(
-                    *self.dragging[0], *self.dragging[1], fill='gray', width=2)
-            else:
-                self.canvas.coords(self.dragging_line, *self.dragging[0], *self.dragging[1])
-        else:
-            if self.dragging_rect is None:
-                self.dragging_rect = self.canvas.create_rectangle(
-                    *self.dragging[0], *self.dragging[1], outline='gray', width=2)
-            else:
-                self.canvas.coords(self.dragging_rect, *self.dragging[0], *self.dragging[1])
-
-    def on_canvas_up(self, event):
-        if self.gui_mode == GUI.FIXED:
-            return
-        
-        if not self.dragging:
-            return
-        
-        if self.dragging_rect is not None:
-            self.canvas.delete(self.dragging_rect)
-            self.dragging_rect = None
-        if self.dragging_line is not None:
-            self.canvas.delete(self.dragging_line)
-            self.dragging_line = None
+        self.main.env = self.grid_.export_as_env()
+        self.main.env.render_callback = self.render
+        self.main.env.export()
+        self.main.prepare()
             
-        if self.gui_mode == GUI.AGENT:
-            down_shapes = self.canvas.find_overlapping(*self.dragging[0], *self.dragging[0])
-            up_shapes = self.canvas.find_overlapping(*self.dragging[1], *self.dragging[1])
-            
-            down_cell = None 
-            for shape in down_shapes:
-                if shape in self.rect_to_cell:
-                    down_cell = self.rect_to_cell[shape]
-                    break
-                
-            up_cell = None
-            for shape in up_shapes:
-                if shape in self.rect_to_cell:
-                    up_shapes = shape
-                    up_cell = self.rect_to_cell[shape]
-                    break
-
-            if down_cell is None or up_cell is None:
-                self.dragging.clear()
-                return
-            if up_cell.obstacle:
-                self.dragging.clear()
-                return
-            
-            down_pos = (down_cell.row, down_cell.col)
-            up_pos = (up_cell.row, up_cell.col)
-            
-            if down_pos == up_pos:
-                if up_pos not in self.pos_to_agent:
-                    self.add_agent(up_pos)
-                else:
-                    self.remove_agent(up_pos)
-                    
-            elif down_pos in self.pos_to_agent and down_pos != up_pos and up_pos not in self.pos_to_agent:
-                self.move_agent(down_pos, up_pos)
-        else:        
-            rects = self.canvas.find_overlapping(*self.dragging[0], *self.dragging[1])
-            for rect in rects:
-                if rect not in self.rect_to_cell:
-                    continue
-                cell = self.rect_to_cell[rect]
-                cell.onclick({
-                    'mode': self.gui_mode,
-                })
-                
-                cell_pos = (cell.row, cell.col)
-                if cell_pos in self.pos_to_agent and self.gui_mode == GUI.OBSTACLE:
-                    self.remove_agent(cell_pos)
-                    
-        self.dragging.clear()
-
-    def remove_agent(self, pos):
-        self.pos_to_agent[pos].erase()
-        del self.pos_to_agent[pos]
-
-    def add_agent(self, pos):
-        agent = ColoredAgent(self.canvas, *pos)
-        self.pos_to_agent[pos] = agent
-
-    def move_agent(self, from_, to):
-        selected = self.pos_to_agent[from_]
-        del self.pos_to_agent[from_]
-        selected.row = to[0]
-        selected.col = to[1]
-        self.pos_to_agent[to] = selected
-        selected.draw()
+        self.main.evaluate = False
+        self._thread = Thread(target=self.main.run, daemon=True)
+        self._thread.start()
     
-    def move_agent_along(self, agents_info):
-        new_agents = {}
-        for i, info in agents_info.items():
-            agent = self.idx_to_agent[i]
-            to = info.get('new_pos', (agent.row, agent.col))
-            new_agents[to] = agent
-            new_agents[to].row = to[0]
-            new_agents[to].col = to[1]
-            new_agents[to].draw()
-        self.pos_to_agent = new_agents
-            
-    def set_map_size(self, row_num=None, col_num=None):
-        if row_num is None:
-            row_num = askinteger('', '공간의 행 개수를 입력하세요.')
-        if col_num is None:
-            col_num = askinteger('', '공간의 열 개수를 입력하세요.')
-        if row_num is None or col_num is None:
-            return
-        self.n_row = min(max(2, row_num), 20)
-        self.n_col = min(max(2, col_num), 20)
-        
-        self.canvas_width = self.CELL_SIZE * self.n_col - 1
-        self.canvas_height = self.CELL_SIZE * self.n_row - 1
-        
-        self.init_canvas()
-        self.map_status.config(text='{}×{}'.format(self.n_row, self.n_col))
+    def _start_learn(self):
+        self._run_status = GUI.RunStatus.TRAINING
+        self.main.evaluate = False
+        self._start_task()
     
-    def start_learn(self):
-        if self.running_thread is not None:
+    def _start_test(self):
+        self._run_status = GUI.RunStatus.TESTING
+        self.main.evaluate = True
+        self._start_task()
+    
+    def _stop_task(self):
+        if self._thread is None:
             return
-        
-        self.set_gui_mode(GUI.FIXED)
-        
-        if not self.exported_env:
-            obstacle_pos = []
-            dirty_pos = []
-            agent_pos = []
-            for pos, cell in self.pos_to_cell.items():
-                if pos[0] >= self.n_row or pos[1] >= self.n_col:
-                    continue
-                if cell.obstacle:
-                    obstacle_pos.append((cell.row, cell.col))
-                if cell.dirty:
-                    dirty_pos.append((cell.row, cell.col))
-            for pos, agent in self.pos_to_agent.items():
-                if pos[0] >= self.n_row or pos[1] >= self.n_col:
-                    continue
-                agent_pos.append(pos)
-                self.idx_to_agent[len(self.idx_to_agent)] = agent
-            
-            env = MAACEnv(n_agent=len(agent_pos), n_row=self.n_row, n_col=self.n_col, 
-                        obstacle_pos=obstacle_pos, dirty_pos=dirty_pos, agent_pos=agent_pos)
-            env.render_callback = self.render
-            
-            self.main.env = env
-            self.main.prepare()
-            self.set_gui_mode(GUI.FIXED)
-            self.exported_env = True
-        
-        self.running_thread = Thread(target=self.main.run, daemon=True)
-        self.running_thread.start()
-        self.env_status.config(text='학습 중...')
-        
-    def stop_learn(self):
-        print('stop learn')
-        if self.running_thread is None:
-            return
-            
-        self.env_status.config(text='학습 중단 중...')
-        
-        
-        print('wait for thread to stop')
+        self._run_status = GUI.RunStatus.PAUSED
         
         self.main.force_stop = True
-        self.running_thread.join()
-        self.running_thread = None
-        self.env_status.config(text='학습 중단됨')
+        self._thread = None
+    
+    def _reset_learning_data(self):
+        self._stop_task()
+        
+        self.main.env = self.grid_.export_as_env()
+        self.main.env.render_callback = self.render
+        self.main.env.export()
+        self.main.prepare()
+        
+        self.main.save_checkpoint()
+    
+    def _get_map_size_text(self):
+        return '{}x{}'.format(self.n_row, self.n_col)
+    
+    def _get_progress_text(self, episode=None, step=None, fast_solve=None):
+        if episode is None:
+            return '학습 준비 중'
+        text = '에피소드: {}'.format(episode)
+        if step is not None:
+            text += ' | 스텝: {}'.format(step)
+        if fast_solve is not None:
+            text += ' | 최단 에피소드: {} 스텝'.format(fast_solve)
+        return text
+    
+    def _get_event_literal(self):
+        return Grid._MODE_LITERAL[self.grid_.event_mode]
+    
+    def _get_run_literal(self):
+        return GUI._RUN_LITERAL[self._run_status]
+    
+# TODO: implement auto save / load environment
+class Grid(tk.Frame):
+    CELL_SIZE = 50
+    MIN_MAP = 5
+    MAX_MAP = 20
+    
+    class EventMode(Enum):
+        EDIT_OBSTACLE = auto()
+        EDIT_DIRTY = auto()
+        EDIT_AGENT = auto()
+        BLOCKED = auto()
+    
+    _CURSOR = {
+        EventMode.EDIT_OBSTACLE: 'crosshair', 
+        EventMode.EDIT_DIRTY: 'crosshair', 
+        EventMode.EDIT_AGENT: 'hand2', 
+        EventMode.BLOCKED: 'X_cursor'
+    }
+    
+    _MODE_LITERAL = {
+        EventMode.EDIT_OBSTACLE: '장애물 및 벽 설정', 
+        EventMode.EDIT_DIRTY: '청소 구역 설정', 
+        EventMode.EDIT_AGENT: '청소기 배치', 
+        EventMode.BLOCKED: '실행 중'
+    }
+    
+    def __init__(self, master, n_row, n_col, env=None):
+        tk.Frame.__init__(self, master)
+        self.pack(side=tk.TOP, fill=tk.BOTH, expand=True, anchor='center', 
+                          padx=5, pady=5)
+        
+        self.n_row = min(max(Grid.MIN_MAP, n_row), Grid.MAX_MAP)
+        self.n_col = min(max(Grid.MIN_MAP, n_col), Grid.MAX_MAP)
 
-    def reset_learn(self):
-        if self.running_thread is not None:
-            self.stop_learn()
+        self.event_mode = Grid.EventMode.EDIT_OBSTACLE
         
-        self.main.env.reset()
-        self.init_with_env(self.main.env)
-        self.exported_env = False
-        self.run_status.config(text='학습 환경 입력 중...')
-        self.set_gui_mode(GUI.OBSTACLE)
+        self._canvas = tk.Canvas(self, bg='white', cursor=self._get_cursor(), 
+                                 width=self._get_canvas_width(), 
+                                 height=self._get_canvas_height())
+        self._canvas.pack(side=tk.TOP)
+        self._canvas.bind('<Button-1>', self._on_mouse_down)
+        self._canvas.bind('<B1-Motion>', self._on_mouse_drag)
+        self._canvas.bind('<ButtonRelease-1>', self._on_mouse_up)
         
-    def render(self, steps=None, visited_layer=None, agents_info=None, 
-               visual=None, **kwargs):
-        # TODO update status bar
-        status = []
-        if 'episode' in kwargs:
-            status.append('에피소드 {}'.format(kwargs['episode']))
-        status.append('{} 스텝'.format(steps))
+        self._drag = [] # [(start_row, start_col), (dest_row, dest_col)]
+        self._drag_indicator = None
         
-        self.run_status.config(text=', '.join(status))
+        self._render_size = (n_row, n_col)
+        self._pos_to_cell = {}  # {(row, col): Cell()}
+        self._rect_to_cell = {} # {rect_id: Cell()}
+        self._pos_to_agent = {} # {(row, col): ColoredAgent()}
+        self._idx_to_agent = {} # {idx: ColoredAgent()}
         
-        if visual is None:
+        if env is not None:
+            self.update_(n_row=env.n_row, n_col=env.n_col)
+            for pos in env.obstacle_pos:
+                self.update_(pos=tuple(pos), obstacle=True)
+            for pos in env.dirty_pos:
+                self.update_(pos=tuple(pos), dirty=True)
+            for idx, pos in enumerate(env.agent_pos):
+                agent = ColoredAgent(self._canvas, *tuple(pos))
+                self._pos_to_agent[tuple(pos)] = agent
+                self._idx_to_agent[idx] = agent
+        
+        self.render()
+        
+    def reset(self):
+        for cell in self._pos_to_cell.values():
+            cell.reset()
+        for agent in self._pos_to_agent.values():
+            agent.reset()
+    
+    def render(self):
+        if self._render_size != (self.n_row, self.n_col):
+            self._canvas.config(width=self._get_canvas_width(), 
+                                height=self._get_canvas_height())
+            self._render_size = (self.n_row, self.n_col)\
+        
+        for row in range(self.n_row):
+            for col in range(self.n_col):
+                pos = (row, col)
+                cell = self._pos_to_cell.get(pos, None)
+                if cell is None:
+                    cell = Cell(self._canvas, row, col)
+                    self._pos_to_cell[pos] = cell
+                if not cell.updated:
+                    pass
+                cell.render()
+                if cell.rect not in self._rect_to_cell:
+                    self._rect_to_cell[cell.rect] = cell
+                if pos in self._pos_to_agent:
+                    self._pos_to_agent[pos].render()
+    
+    def update_(self, event_mode=None,
+               n_row=None, n_col=None, 
+               pos=None, obstacle=None, dirty=None, visited=None, 
+               agent_idx=None, agent_new_pos=None):
+        if event_mode is not None:
+            self.event_mode = event_mode
+            self._canvas.config(cursor=self._get_cursor())
             return
         
-        for row, col in np.argwhere(visited_layer == -1):
-            cell = self.pos_to_cell[row, col]
-            cell.visited = False
-            cell.draw()
-        for row, col in np.argwhere(visited_layer != -1):
-            cell = self.pos_to_cell[row, col]
-            agent = agents_info[visited_layer[row, col]]
-            pos = agent['pos']
-            if pos not in self.pos_to_agent:
-                continue
-            color = self.pos_to_agent[pos[0], pos[1]].color
-            cell.visited = True
-            cell.visited_color = color
-            cell.draw()
-        self.move_agent_along(agents_info)
-
-class Cell:
-    def __init__(self, canvas, row, col):
-        self.canvas = canvas
-        self.row = row
-        self.col = col
-        self.dirty = False
-        self.obstacle = False
-        self.visited = False
+        if n_row is not None:
+            self.n_row = min(max(Grid.MIN_MAP, n_row), Grid.MAX_MAP)
+        if n_col is not None:
+            self.n_col = min(max(Grid.MIN_MAP, n_col), Grid.MAX_MAP)
         
-        self.rect = None
-        self.draw()
+        if n_row is not None or n_col is not None:
+            for row in range(self.n_row):
+                for col in range(self.n_col):
+                    _pos = (row, col)
+                    if _pos not in self._pos_to_cell:
+                        cell = Cell(self._canvas, *_pos)
+                        self._pos_to_cell[_pos] = cell
+
+        if pos is not None:
+            if obstacle is not None:
+                self._pos_to_cell[pos].update_(obstacle=obstacle)
+            if dirty is not None:
+                self._pos_to_cell[pos].update_(dirty=dirty)
+            if visited is not None:
+                self._pos_to_cell[pos].update_(visited=self._idx_to_agent[visited])
+            if agent_new_pos is not None:
+                self._pos_to_agent[pos].update_(new_pos=agent_new_pos)
+                self._pos_to_agent[agent_new_pos] = self._pos_to_agent.pop(pos)
+
+        if agent_idx is not None:
+            if agent_new_pos is None:
+                agent = self._idx_to_agent.pop(agent_idx)
+                agent.render(erase=True)
+                self._pos_to_agent.pop((agent.row, agent.col))
+            else:
+                self._idx_to_agent[agent_idx].update_(new_pos=agent_new_pos)
+        
+        # self.render()
+        
+    def get_obstacle_pos(self):
+        for row in range(self.n_row):
+            for col in range(self.n_col):
+                pos = (row, col)
+                if self._pos_to_cell[pos].obstacle:
+                    yield pos
     
-    def draw(self):
-        if self.rect is None:
-            left = self.col * GUI.CELL_SIZE + 2
-            top = self.row * GUI.CELL_SIZE + 2
-            right = (self.col + 1) * GUI.CELL_SIZE
-            bottom = (self.row + 1) * GUI.CELL_SIZE
-            self.rect = self.canvas.create_rectangle(left,top,right,bottom,outline='gray',fill='')
+    def get_dirty_pos(self):
+        for row in range(self.n_row):
+            for col in range(self.n_col):
+                pos = (row, col)
+                if self._pos_to_cell[pos].dirty:
+                    yield pos
+    
+    def get_idx_agent_pairs(self):
+        pairs = []
+        for i, agent in self._idx_to_agent.items():
+            if agent.row < self.n_row and agent.col < self.n_col:            
+                pairs.append((i, (agent.row, agent.col)))
+        return pairs
+    
+    def export_as_env(self):
+        obstacle_pos = list(map(tuple, self.get_obstacle_pos()))
+        dirty_pos = list(map(tuple, self.get_dirty_pos()))
+        agent_pos = [None for _ in range(len(self._idx_to_agent))]
+        for idx, agent in self._idx_to_agent.items():
+            agent_pos[idx] = (agent.row, agent.col)
         
-        color = 'white'
-        if self.obstacle:
-            color = 'black'
-        elif self.visited:
-            color = self.visited_color
-        elif self.dirty:
-            color ='gray90'
-        self.canvas.itemconfig(self.rect, fill=color)
+        return MAACEnv(len(agent_pos), self.n_row, self.n_col, 
+                       agent_pos=agent_pos, obstacle_pos=obstacle_pos, dirty_pos=dirty_pos)
 
-    def onclick(self, event):
-        if event['mode'] == GUI.OBSTACLE:
-            self.obstacle = not self.obstacle
-        if event['mode'] == GUI.DIRTY:
-            if self.obstacle:
-                return
-            self.dirty = not self.dirty
-        self.draw()
+    """ private methods """
+    
+    def _on_mouse_down(self, event):
+        if self.event_mode == Grid.EventMode.BLOCKED:
+            return
+        self._drag = [(event.x, event.y), (event.x, event.y)]
+    
+    def _on_mouse_drag(self, event):
+        if self.event_mode == Grid.EventMode.BLOCKED:
+            return
+        if not self._drag:
+            return
+        
+        self._drag[-1] = (event.x, event.y)
+        
+        # visualize indicator of dragging event
+        if self._drag_indicator is None:
+            if self.event_mode == Grid.EventMode.EDIT_AGENT:
+                self._drag_indicator = self._canvas.create_line(
+                    *self._drag[0], *self._drag[1], width=2, fill='gray')
+            else:
+                self._drag_indicator = self._canvas.create_rectangle(
+                    *self._drag[0], *self._drag[1], width=2, outline='gray')
+        self._canvas.coords(self._drag_indicator, *self._drag[0], *self._drag[1])    
+    
+    def _on_mouse_up(self, event):
+        if self.event_mode == Grid.EventMode.BLOCKED:
+            return
+        if not self._drag:
+            return
+        
+        # do something according to event_mode
+        if self.event_mode == Grid.EventMode.EDIT_AGENT:
+            start_shapes = self._canvas.find_overlapping(*self._drag[0], *self._drag[0])
+            dest_shapes = self._canvas.find_overlapping(*self._drag[1], *self._drag[1])
+            
+            start_cell = None
+            dest_cell = None
+            
+            for shape in start_shapes:
+                start_cell = self._get_cell_by_rect(shape)
+                if start_cell is not None:
+                    break
+            for shape in dest_shapes:
+                dest_cell = self._get_cell_by_rect(shape)
+                if dest_cell is not None:
+                    break
+                
+            if start_cell is not None and dest_cell is not None and not dest_cell.obstacle:
+                pos = (start_cell.row, start_cell.col)
+                new_pos = (dest_cell.row, dest_cell.col)
+                updated = False
+                
+                if pos == new_pos:
+                    updated = True
+                    if pos in self._pos_to_agent:
+                        self._pos_to_agent.pop(pos).render(erase=True)
+                    else:
+                        agent = ColoredAgent(self._canvas, *pos)
+                        self._pos_to_agent[pos] = agent
+                elif pos in self._pos_to_agent and new_pos not in self._pos_to_agent:
+                    updated = True
+                    self._pos_to_agent[pos].update_(new_pos=new_pos)
+                    self._pos_to_agent[new_pos] = self._pos_to_agent.pop(pos)
 
+                if updated:
+                    self._idx_to_agent = {i: agent 
+                                            for i, agent 
+                                            in enumerate(self._pos_to_agent.values())}
+        else:
+            shapes = self._canvas.find_overlapping(*self._drag[0], *self._drag[1])
+            for shape in shapes:
+                cell = self._get_cell_by_rect(shape)
+                if cell is None:
+                    continue
+                if self.event_mode == Grid.EventMode.EDIT_OBSTACLE \
+                    and (cell.row, cell.col) not in self._pos_to_agent:
+                    cell.update_(obstacle=not cell.obstacle)
+                elif self.event_mode == Grid.EventMode.EDIT_DIRTY:
+                    cell.update_(dirty=not cell.dirty)
+                    
+        self.render()
+        
+        # remove indicator
+        self._drag.clear()
+        self._canvas.delete(self._drag_indicator)
+        self._drag_indicator = None
+    
+    def _get_cell_by_pos(self, pos):
+        return self._pos_to_cell.get(pos, None)
+    
+    def _get_cell_by_rect(self, rect):
+        cell = self._rect_to_cell.get(rect, None)
+        if cell is None:
+            for _cell in self._pos_to_cell.values():
+                if _cell.rect == rect:
+                    self._rect_to_cell[rect] = _cell
+                    cell = _cell
+                    break
+        return cell
+    
+    def _get_agent_by_pos(self, pos):
+        return self._pos_to_agent[pos]
+
+    def _get_agent_by_idx(self, idx):
+        return self._idx_to_agent[idx]
+
+    def _get_cursor(self):
+        return Grid._CURSOR[self.event_mode]
+ 
+    def _get_canvas_height(self):
+        return self.n_row * Grid.CELL_SIZE - 1
+
+    def _get_canvas_width(self):
+        return self.n_col * Grid.CELL_SIZE - 1
+
+""" Rule: Each visual component never render itself. """
 
 class ColoredAgent:
     def __init__(self, canvas, row, col):
@@ -480,19 +518,93 @@ class ColoredAgent:
         self.row = row
         self.col = col
         
-        self.oval = None
-        self.draw()
+        self._original_pos = (row, col)
+        self._oval = None
     
-    def erase(self):
-        if self.oval is not None:
-            self.canvas.delete(self.oval)
+    def reset(self):
+        self.row, self.col = self._original_pos
     
-    def draw(self):
-        left = self.col * GUI.CELL_SIZE + 2 + 4
-        top = self.row * GUI.CELL_SIZE + 2 + 4
-        right = (self.col + 1) * GUI.CELL_SIZE - 4
-        bottom = (self.row + 1) * GUI.CELL_SIZE - 4
-        if self.oval is None:
-            self.oval = self.canvas.create_oval(left, top, right, bottom, fill=self.color, outline='black', width=2)
+    def render(self, erase=False):
+        if erase:
+            self.canvas.delete(self._oval)
+            self._oval = None
+            return
+        
+        left = self.col * Grid.CELL_SIZE + 2 + 4
+        top = self.row * Grid.CELL_SIZE + 2 + 4
+        right = (self.col + 1) * Grid.CELL_SIZE - 4
+        bottom = (self.row + 1) * Grid.CELL_SIZE - 4
+        if self._oval is not None:
+            self.canvas.delete(self._oval)
+        self._oval = self.canvas.create_oval(left, top, right, bottom, fill=self.color, width=2)
+    
+    def update_(self, new_pos=None):
+        if new_pos is not None:
+            self.row, self.col = new_pos
+    
+class Cell:
+    EMPTY_COLOR = 'white'
+    DIRTY_COLOR = 'gray90'
+    OBSTACLE_COLOR = 'black'
+    
+    def __init__(self, canvas, row, col):
+        self.canvas = canvas
+        self.row = row
+        self.col = col
+        
+        self.obstacle = False
+        self.dirty = True   # defalut is True
+        self.visited = None
+        self.rect = None
+        
+        self.updated = True
+        
+        self._fill = Cell.DIRTY_COLOR   # defalut is DIRTY_COLOR
+    
+    def reset(self):
+        self.updated = True
+        
+        self.visited = None
+        
+        if self.obstacle:
+            self._fill = Cell.OBSTACLE_COLOR
+        elif self.dirty:
+            self._fill = Cell.DIRTY_COLOR
         else:
-            self.canvas.coords(self.oval, left, top, right, bottom) 
+            self._fill = Cell.EMPTY_COLOR
+    
+    def render(self, erase=False):
+        self.updated = False
+        
+        if erase:
+            self.canvas.delete(self.rect)
+            self.rect = None
+            return
+        
+        if self.rect is None:
+            left = self.col * Grid.CELL_SIZE + 2
+            top = self.row * Grid.CELL_SIZE + 2
+            right = (self.col + 1) * Grid.CELL_SIZE
+            bottom = (self.row + 1) * Grid.CELL_SIZE
+            self.rect = self.canvas.create_rectangle(left, top, right, bottom, fill=self._fill)
+        else:
+            self.canvas.itemconfig(self.rect, fill=self._fill)
+    
+    def update_(self, obstacle=None, dirty=None, visited: ColoredAgent=None):
+        self.updated = True
+        
+        if obstacle is not None:
+            self.obstacle = obstacle
+            self.visited = None
+        if dirty is not None:
+            self.dirty = dirty
+        if visited is not None and not self.obstacle:
+            self.visited = visited
+        if self.obstacle:
+            self._fill = Cell.OBSTACLE_COLOR
+        elif self.visited:
+            self._fill = self.visited.color
+        elif self.dirty:
+            self._fill = Cell.DIRTY_COLOR
+        else:
+            self._fill = Cell.EMPTY_COLOR
