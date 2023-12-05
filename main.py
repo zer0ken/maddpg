@@ -1,10 +1,8 @@
-import threading
-from tkinter import Tk
+import tkinter as tk
 import numpy as np
 from gui import GUI
 from maddpg import MADDPG
-from buffer import PERMA, MultiAgentReplayBuffer
-# from make_env import make_env
+from buffer import MultiAgentReplayBuffer
 from environment import MAACEnv
 import time
 
@@ -150,6 +148,7 @@ class Main:
         self.maddpg_agents.save_checkpoint()
 
 if __name__ == '__main__':
-    tk = Tk()
-    gui = GUI(tk, Main())
-    tk.mainloop()
+    root = tk.Tk()
+    main = Main()
+    gui = GUI(root, main)
+    gui.mainloop()

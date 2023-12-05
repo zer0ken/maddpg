@@ -67,9 +67,7 @@ class MAACEnv:
             self.obstacle_layer = np.zeros((self.n_row, self.n_col))
             for pos in self.obstacle_pos:
                 self.obstacle_layer[pos[0], pos[1]] = 1
-        
-        print('reset done\ndirty:\n', self.dirty_layer, '\nobstacle:\n', self.obstacle_layer)
-        
+                
         if not hasattr(self, 'num_dirty'):
             self.num_dirty = self.dirty_layer.sum()
         
