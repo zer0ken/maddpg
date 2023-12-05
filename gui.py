@@ -175,7 +175,6 @@ class GUI(tk.Frame):
         self.main.env.export()
         self.main.prepare()
             
-        self.main.evaluate = False
         self._thread = Thread(target=self.main.run, daemon=True)
         self._thread.start()
     
@@ -386,12 +385,22 @@ class Grid(tk.Frame):
     def export_as_env(self):
         obstacle_pos = list(map(tuple, self.get_obstacle_pos()))
         dirty_pos = list(map(tuple, self.get_dirty_pos()))
-        agent_pos = [None for _ in range(len(self._idx_to_agent))]
-        for idx, agent in self._idx_to_agent.items():
-            agent_pos[idx] = (agent.row, agent.col)
+        pos_to_agent = {}
+        idx_to_agent = {}
+        for i in range(len(self._idx_to_agent)):
+            agent = self._idx_to_agent[i]
+            if agent.row < self.n_row and agent.col < self.n_col:
+                pos_to_agent[(agent.row, agent.col)] = agent
+                idx_to_agent[len(idx_to_agent)] = agent
+            else:
+                agent.render(erase=True)
         
-        return MAACEnv(len(agent_pos), self.n_row, self.n_col, 
-                       agent_pos=agent_pos, obstacle_pos=obstacle_pos, dirty_pos=dirty_pos)
+        self._idx_to_agent = idx_to_agent
+        self._pos_to_agent = pos_to_agent
+        
+        return MAACEnv(len(pos_to_agent), self.n_row, self.n_col, 
+                       agent_pos=list(pos_to_agent.keys()), obstacle_pos=obstacle_pos, 
+                       dirty_pos=dirty_pos)
 
     """ private methods """
     
