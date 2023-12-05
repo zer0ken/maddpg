@@ -6,24 +6,36 @@ import torch.optim as optim
 import os
 
 class CriticNetwork(nn.Module):
-    def __init__(self, beta, input_dims, fc1_dims, fc2_dims, 
-                    n_agents, n_actions, name, chkpt_dir):
+    def __init__(self, beta, local_dim, global_dim,
+                 conv1_channel, conv2_channel, fc1_dims, 
+                 n_agents, n_actions, name, chkpt_dir):
         super(CriticNetwork, self).__init__()
 
         self.chkpt_file = os.path.join(chkpt_dir, name)
         os.makedirs(os.path.dirname(self.chkpt_file), exist_ok=True)
 
-        self.fc1 = nn.Linear(input_dims+n_agents*n_actions, fc1_dims)
-        self.fc2 = nn.Linear(fc1_dims, fc2_dims)
-        self.q = nn.Linear(fc2_dims, 1)
+        self.conv1 = nn.Conv3d(3, conv1_channel, (1, 3, 3))    # [3, H, W] -> [32, H-2, W-2]
+        self.conv2 = nn.Conv3d(conv1_channel, conv2_channel, (3, 3, 3))   # [32, H-2, W-2] -> [64, H-4, W-4]
+        self.fc1 = nn.Linear(conv2_channel*(n_agents-2)*(global_dim[0]-4)*(global_dim[1]-4)
+                             + n_agents*local_dim[0]*local_dim[1]
+                             + n_agents*n_actions,
+                             fc1_dims)
+        self.q = nn.Linear(fc1_dims, 1)
 
         self.optimizer = optim.Adam(self.parameters(), lr=beta)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
         self.to(self.device)
 
-    def forward(self, state, action):
-        x = F.relu(self.fc1(T.cat([state, action], dim=1)))
-        x = F.relu(self.fc2(x))
+    def forward(self, obstacle, self_, other, dirty, action):
+        state1 = T.stack([self_, other, dirty], dim=1)
+        x = F.relu(self.conv1(state1))
+        x = F.relu(self.conv2(x))
+
+        x = x.flatten(start_dim=1)
+        state2 = obstacle.flatten(start_dim=1)
+        state3 = action.flatten(start_dim=1)
+        
+        x = F.relu(self.fc1(T.cat([x, state2, state3], dim=1)))
         q = self.q(x)
 
         return q
@@ -36,24 +48,38 @@ class CriticNetwork(nn.Module):
 
 
 class ActorNetwork(nn.Module):
-    def __init__(self, alpha, input_dims, fc1_dims, fc2_dims, 
+    def __init__(self, alpha, local_dim, global_dim,
+                 conv1_channel, conv2_channel, fc1_dims, 
                  n_actions, name, chkpt_dir):
         super(ActorNetwork, self).__init__()
 
         self.chkpt_file = os.path.join(chkpt_dir, name)
         os.makedirs(os.path.dirname(self.chkpt_file), exist_ok=True)
 
-        self.fc1 = nn.Linear(input_dims, fc1_dims)
-        self.fc2 = nn.Linear(fc1_dims, fc2_dims)
-        self.pi = nn.Linear(fc2_dims, n_actions)
+        self.conv1 = nn.Conv2d(3, conv1_channel, 3)    # [3, H, W] -> [32, H-2, W-2]
+        self.conv2 = nn.Conv2d(conv1_channel, conv2_channel, 3)   # [32, H-2, W-2] -> [64, H-4, W-4]
+        self.fc1 = nn.Linear(conv2_channel*(global_dim[0]-4)*(global_dim[1]-4)
+                             + local_dim[0]*local_dim[1], 
+                             fc1_dims)
+        self.pi = nn.Linear(fc1_dims, n_actions)
 
         self.optimizer = optim.Adam(self.parameters(), lr=alpha)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
         self.to(self.device)
 
-    def forward(self, state):
-        x = F.relu(self.fc1(state))
-        x = F.relu(self.fc2(x))
+    def forward(self, obstacle, self_, other, dirty):
+        state1 = T.stack([self_, other, dirty], dim=1)
+        # print('actor', state1.shape)
+        x = F.relu(self.conv1(state1))
+        # print('actor', x.shape)
+        x = F.relu(self.conv2(x))
+        # print('actor', x.shape)
+        
+        x = x.flatten(start_dim=1)
+        state2 = obstacle.flatten(start_dim=1)
+        # print('actor', x.shape, state2.shape)
+        
+        x = F.relu(self.fc1(T.cat([x, state2], dim=1)))
         pi = T.softmax(self.pi(x), dim=1)
 
         return pi

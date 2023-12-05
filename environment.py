@@ -2,10 +2,19 @@ import os
 import numpy as np
 from gym.spaces import Discrete
 
+
+class Observatoin:
+    def __init__(self, obstacle, self_, other, dirty):
+        self.obstacle = obstacle
+        self.self_ = self_
+        self.other = other
+        self.dirty = dirty
+
+
 class MAACEnv:
     ACTIONS = {0: (-1, 0), 1: (0, 1), 2: (1, 0), 3: (0, -1), 4: (0, 0)}
 
-    def __init__(self, n_agent=3, n_row=10, n_col=10,
+    def __init__(self, n_agent=3, n_row=10, n_col=10, visual_field=3,
                  agent_pos=None, dirty_pos=None, obstacle_pos=None):
         self.n_row = max(5, n_row)
         self.n_col = max(5, n_col)
@@ -32,7 +41,7 @@ class MAACEnv:
                 self.agent_pos = list(map(tuple, indices[np.random.choice(
                     len(indices), self.n_agent, replace=False)]))
 
-        self.visual_field = 3
+        self.visual_field = visual_field
         
         self.reset()
         self.dirty_layer[self.dirty_layer == self.obstacle_layer] = 0
@@ -77,7 +86,7 @@ class MAACEnv:
         return obs_n
 
     def step(self, actions):
-        rewards = [0 for i in range(self.n_agent)]
+        rewards = np.zeros((self.n_agent,))
         for i, action_prob in enumerate(actions):
             action = np.argmax(action_prob)
             self._step_agent(self.agents[i], action)
@@ -172,23 +181,21 @@ class MAACEnv:
         padded_obstacle_layer[1:-1, 1:-1] = self.obstacle_layer
         vf=self.visual_field//2
         agent_vision_obstacle = padded_obstacle_layer[padded_pos[0]-vf:padded_pos[0]+(vf+1), padded_pos[1]-vf:padded_pos[1]+(vf+1)]
-        agent_vision_obstacle = agent_vision_obstacle.reshape(self.visual_field**2)
         
         # 에이전트 자신
         agent_self_layer = np.zeros((self.n_row, self.n_col))
         agent_self_layer[pos[0], pos[1]] = 1
-        agent_self_layer = agent_self_layer.reshape(self.n_row*self.n_col)
+        agent_self_layer = agent_self_layer
         
         # 다른 에이전트
         other_agent_layer = np.zeros_like(self.agent_layer)
         other_agent_layer[np.argwhere(self.agent_layer != -1)] = 1
         other_agent_layer[pos[0], pos[1]] = 0
-        other_agent_layer_flatten = other_agent_layer.reshape(self.n_row*self.n_col)
         
         # 청소해야할 곳
-        dirty_layer_flatten = self.dirty_layer.copy().reshape(self.n_row*self.n_col)
+        dirty_layer = self.dirty_layer.copy()
         
-        return np.concatenate((agent_vision_obstacle, agent_self_layer, other_agent_layer_flatten, dirty_layer_flatten))
+        return Observatoin(agent_vision_obstacle, agent_self_layer, other_agent_layer, dirty_layer)
         
     def get_info(self):
         # we can use this to render GUI, do debug, and e.t.c. 
