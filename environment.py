@@ -22,14 +22,15 @@ class MAACEnv:
             
             if obstacle_pos is None:
                 picked = np.random.choice(len(indices), self.n_row * self.n_col // 10, replace=False)
-                self.obstacle_pos = indices[picked, :]
+                self.obstacle_pos = list(map(tuple,  indices[picked, :]))
                 indices = np.delete(indices, picked, axis=0)
                 
             if dirty_pos is None:
-                self.dirty_pos = indices
-            
+                self.dirty_pos = list(map(tuple, indices))
+
             if agent_pos is None:
-                self.agent_pos = indices[np.random.choice(len(indices), self.n_agent, replace=False)]
+                self.agent_pos = list(map(tuple, indices[np.random.choice(
+                    len(indices), self.n_agent, replace=False)]))
 
         self.visual_field = 3
         
@@ -53,23 +54,21 @@ class MAACEnv:
         self.steps = 0
 
         for i, pos in enumerate(self.agent_pos):
-            self.agents[i] = {'idx': i, 'home': pos, 'pos': pos}
+            self.agents[i] = {'idx': i, 'home': pos, 'pos': pos, 'new_pos': pos}
             self.agent_layer[pos[0], pos[1]] = i
             self.visited_layer[pos[0], pos[1]] = i
 
         for pos in self.dirty_pos:
-            self.dirty_layer[pos[0], pos[1]] = 1
+            if pos not in self.obstacle_pos:
+                self.dirty_layer[pos[0], pos[1]] = 1
 
         # 환경 처음 만들 때만 obstacle_layer 초기화
         if not hasattr(self, 'obstacle_layer'):
             self.obstacle_layer = np.zeros((self.n_row, self.n_col))
             for pos in self.obstacle_pos:
                 self.obstacle_layer[pos[0], pos[1]] = 1
-                self.dirty_layer[pos[0], pos[1]] = 0
-                self.agent_layer[pos[0], pos[1]] = -1
-        print('obstacle:\n', self.obstacle_layer)
-        print('dirty:\n', self.dirty_layer)
-        print('agent:\n', self.agent_layer)
+        
+        print('reset done\ndirty:\n', self.dirty_layer, '\nobstacle:\n', self.obstacle_layer)
         
         if not hasattr(self, 'num_dirty'):
             self.num_dirty = self.dirty_layer.sum()
@@ -80,9 +79,6 @@ class MAACEnv:
         return obs_n
 
     def step(self, actions):
-        if not self.exported:
-            self.export()
-        
         rewards = [0 for i in range(self.n_agent)]
         for i, action_prob in enumerate(actions):
             action = np.argmax(action_prob)
@@ -217,20 +213,26 @@ class MAACEnv:
         pass
     
     def export(self):
-        np.array([self.n_agent, self.n_row, self.n_col]).tofile('./last_env/args.dat')
-        np.array(self.agent_pos).tofile('./last_env/agent_pos.dat')
-        np.array(self.dirty_pos).tofile('./last_env/dirty_pos.dat')
-        np.array(self.obstacle_pos).tofile('./last_env/obstacle_pos.dat')
+        np.array([self.n_agent, self.n_row, self.n_col]).tofile('./last_env/args.csv', sep=',')
+        np.array(self.agent_pos).tofile('./last_env/agent_pos.csv', sep=',')
+        np.array(self.dirty_pos).tofile('./last_env/dirty_pos.csv', sep=',')
+        np.array(self.obstacle_pos).tofile('./last_env/obstacle_pos.csv', sep=',')
         
         self.exported = True
     
     def import_last_env():
-        if not os.path.exists('./last_env/args.dat'):
+        if not os.path.exists('./last_env/args.csv'):
             return None
         
-        args = np.fromfile('./last_env/args.dat', dtype=np.int32)
-        agent_pos = np.fromfile('./last_env/agent_pos.dat', dtype=np.int32).reshape(args[0], 2)
-        dirty_pos = np.fromfile('./last_env/dirty_pos.dat', dtype=np.int32).reshape(-1, 2)
-        obstacle_pos = np.fromfile('./last_env/obstacle_pos.dat', dtype=np.int32).reshape(-1, 2)
+        args = np.fromfile('./last_env/args.csv', sep=', ', 
+                           dtype=np.int32)
+        agent_pos = np.fromfile('./last_env/agent_pos.csv', sep=', ', 
+                                dtype=np.int32).reshape(args[0], 2)
+        dirty_pos = np.fromfile('./last_env/dirty_pos.csv', sep=', ', 
+                                dtype=np.int32).reshape(-1, 2)
+        obstacle_pos = np.fromfile('./last_env/obstacle_pos.csv', sep=', ', 
+                                   dtype=np.int32).reshape(-1, 2)
         
-        return MAACEnv(*args, agent_pos=agent_pos, dirty_pos=dirty_pos, obstacle_pos=obstacle_pos)
+        return MAACEnv(*args, agent_pos=list(map(tuple, agent_pos)), 
+                       dirty_pos=list(map(tuple, dirty_pos)), 
+                       obstacle_pos=list(map(tuple, obstacle_pos)))

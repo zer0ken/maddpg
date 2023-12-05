@@ -24,6 +24,8 @@ class Main:
         self.env = MAACEnv.import_last_env()
         if self.env is None:
             self.env = MAACEnv()
+        
+        self.prepared = False
     
         # configs
         self.evaluate = False
@@ -63,6 +65,7 @@ class Main:
             50000, critic_dims, actor_dims, self.n_actions, self.n_agents, 
             batch_size=1024)
         
+        self.prepared = True
         print('preparation done')
     
     def run(self):
@@ -117,10 +120,9 @@ class Main:
                     break
                 
                 if self.force_render or self.evaluate or i % self.game_render_period == 0:
-                    self.env.render(visual=True, episode=self.game_progress, **self.env.get_info())
+                    self.env.render(visual=True, episodes=self.game_progress, **self.env.get_info())
                     if self.evaluate:
                         time.sleep(0.1) # to slow down the action for the video
-                
             self.score_history.append(score)
             avg_score = np.mean(self.score_history[-100:])
             
@@ -135,9 +137,10 @@ class Main:
             if self.force_stop:
                 self.save_checkpoint()
                 self.force_stop = False
+                self.env.render(episodes=self.game_progress, reset=True, **self.env.get_info())
                 break
             
-            self.env.render(episode=self.game_progress, **self.env.get_info())
+            self.env.render(episodes=self.game_progress, **self.env.get_info())
             
         self.force_render = False
             
