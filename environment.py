@@ -58,7 +58,8 @@ class MAACEnv:
             self.visited_layer[pos[0], pos[1]] = i
 
         for pos in self.dirty_pos:
-            self.dirty_layer[pos[0], pos[1]] = 1
+            if pos not in self.obstacle_pos:
+                self.dirty_layer[pos[0], pos[1]] = 1
 
         # 환경 처음 만들 때만 obstacle_layer 초기화
         if not hasattr(self, 'obstacle_layer'):
@@ -217,4 +218,6 @@ class MAACEnv:
         dirty_pos = np.fromfile('./last_env/dirty_pos.dat', dtype=np.int32).reshape(-1, 2)
         obstacle_pos = np.fromfile('./last_env/obstacle_pos.dat', dtype=np.int32).reshape(-1, 2)
         
-        return MAACEnv(*args, agent_pos=agent_pos, dirty_pos=dirty_pos, obstacle_pos=obstacle_pos)
+        return MAACEnv(*args, agent_pos=list(map(tuple, agent_pos)), 
+                       dirty_pos=list(map(tuple, dirty_pos)), 
+                       obstacle_pos=list(map(tuple, obstacle_pos)))
