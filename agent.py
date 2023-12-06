@@ -2,29 +2,25 @@ import torch as T
 from networks import ActorNetwork, CriticNetwork
 
 class Agent:
-    def __init__(self, n_actions, n_agents, agent_idx, chkpt_dir,
-                    alpha=0.01, beta=0.01,
-                    local_dim=(3, 3), global_dim=(10, 10), 
-                    conv1_channel=16, conv2_channel=32, fc1_dims=32,
-                    gamma=0.95, tau=0.01):
+    def __init__(self, n_actions, n_agents, agent_idx, local_dim,
+                    conv1_channel, conv2_channel, fc1_dims, fc2_dims,
+                    alpha, beta, gamma, tau, chkpt_dir):
         self.gamma = gamma
         self.tau = tau
         self.n_actions = n_actions
         self.agent_name = 'agent_%s' % agent_idx
-        self.actor = ActorNetwork(alpha, local_dim, global_dim, conv1_channel, 
-                                  conv2_channel, fc1_dims, n_actions,
-                                  chkpt_dir=chkpt_dir, name=self.agent_name+'_actor')
-        self.critic = CriticNetwork(beta, local_dim, global_dim, conv1_channel, 
-                                    conv2_channel, fc1_dims, n_agents, n_actions, 
-                            chkpt_dir=chkpt_dir, name=self.agent_name+'_critic')
-        self.target_actor = ActorNetwork(alpha, local_dim, global_dim, conv1_channel, 
-                                         conv2_channel, fc1_dims, n_actions,
-                                         chkpt_dir=chkpt_dir, 
-                                         name=self.agent_name+'_target_actor')
-        self.target_critic = CriticNetwork(beta, local_dim, global_dim, conv1_channel, 
-                                           conv2_channel, fc1_dims, n_agents, n_actions,
-                                           chkpt_dir=chkpt_dir,
-                                           name=self.agent_name+'_target_critic')
+        self.actor = ActorNetwork(
+            alpha, local_dim, conv1_channel, conv2_channel, fc1_dims, fc2_dims, 
+            n_actions, chkpt_dir=chkpt_dir, name=self.agent_name+'_actor')
+        self.critic = CriticNetwork(
+            beta, local_dim, conv1_channel, conv2_channel, fc1_dims, fc2_dims, 
+            n_agents, n_actions, chkpt_dir=chkpt_dir, name=self.agent_name+'_critic')
+        self.target_actor = ActorNetwork(
+            alpha, local_dim, conv1_channel, conv2_channel, fc1_dims, fc2_dims, 
+            n_actions, chkpt_dir=chkpt_dir, name=self.agent_name+'_target_actor')
+        self.target_critic = CriticNetwork(
+            beta, local_dim, conv1_channel, conv2_channel, fc1_dims, fc2_dims, 
+            n_agents, n_actions, chkpt_dir=chkpt_dir, name=self.agent_name+'_target_critic')
 
         self.update_network_parameters(tau=1)
 

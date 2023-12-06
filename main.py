@@ -21,9 +21,7 @@ class Main:
     MAX_STEPS = 1000
     
     def __init__(self):
-        self.env = MAACEnv.import_last_env()
-        if self.env is None:
-            self.env = MAACEnv()
+        self.env = None # need to be set by GUI
         
         # configs
         self.evaluate = False
@@ -49,19 +47,18 @@ class Main:
         self.fastest_solve = np.inf
         
         self.n_agents = self.env.n
+        
         local_dim = (self.env.visual_field, self.env.visual_field)
-        global_dim = (self.env.n_row, self.env.n_col)
 
         # action space is a list of arrays, assume each agent has same action space
         self.n_actions = self.env.action_space[0].n
-        self.maddpg_agents = MADDPG(self.n_agents, self.n_actions,
-                                    local_dim=local_dim, global_dim=global_dim,
-                                    scenario=scenario,
-                                    chkpt_dir='.\\tmp\\maddpg\\')
+        self.maddpg_agents = MADDPG(self.n_agents, self.n_actions, local_dim=local_dim,
+                                    scenario=scenario, chkpt_dir='.\\tmp\\maddpg\\')
 
         self.memory = PERMA(
-            40000, local_dim, global_dim, self.n_actions, self.n_agents, 
+            40000, local_dim, self.n_actions, self.n_agents, 
             batch_size=2048)
+        
         
         print('preparation done')
     
@@ -119,8 +116,8 @@ class Main:
                 if self.force_render or self.evaluate or i % self.episode_per_render == 0:
                     self.env.render(visual=True, episodes=self.game_progress, 
                                     fastest_solve=self.fastest_solve, **self.env.get_info())
-                    if self.evaluate:
-                        time.sleep(0.1) # to slow down the action for the video
+                    # if self.evaluate:
+                    #     time.sleep(0.1) # to slow down the action for the video
             self.score_history.append(score)
             avg_score = np.mean(self.score_history[-100:])
             

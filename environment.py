@@ -3,7 +3,7 @@ import numpy as np
 from gym.spaces import Discrete
 
 
-class Observatoin:
+class Observation:
     def __init__(self, obstacle, self_, other, dirty):
         self.obstacle = obstacle
         self.self_ = self_
@@ -11,10 +11,11 @@ class Observatoin:
         self.dirty = dirty
 
 
+""" Rule: Never change its properties. If you need, just make a new instance """
 class MAACEnv:
     ACTIONS = {0: (-1, 0), 1: (0, 1), 2: (1, 0), 3: (0, -1), 4: (0, 0)}
 
-    def __init__(self, n_agent=3, n_row=10, n_col=10, visual_field=3,
+    def __init__(self, n_agent=3, n_row=10, n_col=10, visual_field=5,
                  agent_pos=None, dirty_pos=None, obstacle_pos=None):
         self.n_row = max(5, n_row)
         self.n_col = max(5, n_col)
@@ -48,7 +49,7 @@ class MAACEnv:
         
         """ Gym Env variable """
         self.n = self.n_agent
-        self.observation_space = np.array([np.zeros((self.visual_field**2 + 3*self.n_row*self.n_col,)) for _ in range(self.n_agent)])
+        self.observation_space = np.zeros((self.n_agent, 4, self.visual_field, self.visual_field))
         self.action_space = np.array([Discrete(5) for _ in range(self.n_agent)])
         
         """ GUI control """
@@ -174,28 +175,42 @@ class MAACEnv:
     # 특정 에이전트의 local observation 반환
     def get_observation(self, agent_idx):
         pos = self.agents[agent_idx]['pos']
-        padded_pos = np.array([pos[0]+1, pos[1]+1])
         
         # 에이전트 주변 시야
-        padded_obstacle_layer = np.ones((self.n_row+2, self.n_col+2))
-        padded_obstacle_layer[1:-1, 1:-1] = self.obstacle_layer
-        vf=self.visual_field//2
-        agent_vision_obstacle = padded_obstacle_layer[padded_pos[0]-vf:padded_pos[0]+(vf+1), padded_pos[1]-vf:padded_pos[1]+(vf+1)]
+        obstacle_layer = self.obstacle_layer
         
         # 에이전트 자신
-        agent_self_layer = np.zeros((self.n_row, self.n_col))
+        agent_self_layer = np.zeros_like(self.agent_layer)
         agent_self_layer[pos[0], pos[1]] = 1
-        agent_self_layer = agent_self_layer
         
         # 다른 에이전트
         other_agent_layer = np.zeros_like(self.agent_layer)
-        other_agent_layer[np.argwhere(self.agent_layer != -1)] = 1
+        indices = np.argwhere(self.agent_layer != -1)
+        other_agent_layer[indices[:, 0], indices[:, 1]] = 1
         other_agent_layer[pos[0], pos[1]] = 0
         
         # 청소해야할 곳
-        dirty_layer = self.dirty_layer.copy()
+        dirty_layer = self.dirty_layer
         
-        return Observatoin(agent_vision_obstacle, agent_self_layer, other_agent_layer, dirty_layer)
+        def crop_with_pad(layer, center, pad=0):
+            shape = layer.shape
+            diff = self.visual_field//2
+            shape = (shape[0]+diff*2, shape[1]+diff*2)
+            padded = np.zeros(shape)
+            if pad != 0:
+                padded += pad
+            padded[diff:-diff, diff:-diff] = layer[:, :]
+            pos = (center[0] + diff, center[1] + diff)
+            crop = padded[pos[0] - diff : pos[0] + diff + 1, 
+                          pos[1] - diff : pos[1] + diff + 1]
+            return crop
+        
+        obstacle_layer = crop_with_pad(obstacle_layer, pos, pad=1)
+        agent_self_layer = crop_with_pad(agent_self_layer, pos, pad=0)
+        other_agent_layer = crop_with_pad(other_agent_layer, pos, pad=0)
+        dirty_layer = crop_with_pad(dirty_layer, pos, pad=0)
+                
+        return Observation(obstacle_layer, agent_self_layer, other_agent_layer, dirty_layer)
         
     def get_info(self):
         # we can use this to render GUI, do debug, and e.t.c. 

@@ -2,8 +2,7 @@ import numpy as np
 import torch as T
 
 class MultiAgentReplayBuffer:
-    def __init__(self, max_size, local_dim, global_dim, 
-                 n_actions, n_agents, batch_size):
+    def __init__(self, max_size, local_dim, n_actions, n_agents, batch_size):
         self.mem_size = max_size
         self.mem_cntr = 0
         self.n_actions = n_actions
@@ -11,14 +10,14 @@ class MultiAgentReplayBuffer:
         self.batch_size = batch_size
 
         self.obstacle_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
-        self.self_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
-        self.other_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
-        self.dirty_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
+        self.self_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
+        self.other_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
+        self.dirty_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
         
         self.new_obstacle_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
-        self.new_self_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
-        self.new_other_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
-        self.new_dirty_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
+        self.new_self_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
+        self.new_other_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
+        self.new_dirty_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
         
         self.reward_memory = np.zeros((self.mem_size, n_agents), dtype=np.float32)
         self.terminal_memory = np.zeros((self.mem_size, n_agents), dtype=bool)
@@ -76,7 +75,7 @@ class MultiAgentReplayBuffer:
 
 
 class PERMA:
-    def __init__(self, max_size, local_dim, global_dim, 
+    def __init__(self, max_size, local_dim, 
                  n_actions, n_agents, batch_size):
         self.mem_size = max_size
         self.mem_cntr = 0
@@ -90,14 +89,14 @@ class PERMA:
         self.max_reward = -np.inf
 
         self.obstacle_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
-        self.self_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
-        self.other_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
-        self.dirty_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
+        self.self_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
+        self.other_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
+        self.dirty_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
         
         self.new_obstacle_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
-        self.new_self_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
-        self.new_other_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
-        self.new_dirty_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
+        self.new_self_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
+        self.new_other_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
+        self.new_dirty_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
         
         self.reward_memory = np.zeros((self.mem_size, n_agents), dtype=np.float32)
         self.terminal_memory = np.zeros((self.mem_size, n_agents), dtype=bool)

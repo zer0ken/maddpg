@@ -2,25 +2,21 @@ from threading import Thread
 import torch as T
 import torch.nn.functional as F
 from agent import Agent
-from environment import Observatoin
+from environment import Observation
 
 class MADDPG:
-    def __init__(self, n_agents, n_actions, 
-                 local_dim=(3, 3), global_dim=(10, 10), 
-                 conv1_channel=32, conv2_channel=64, fc1_dims=32,
-                 scenario='simple', alpha=0.01, beta=0.01,
-                 gamma=0.99, tau=0.01, chkpt_dir='tmp/maddpg/'):
+    def __init__(self, n_agents, n_actions, local_dim=(3, 3), 
+                 conv1_channel=16, conv2_channel=32, fc1_dims=32, fc2_dims=64,
+                 scenario='simple', alpha=0.05, beta=0.02,
+                 gamma=0.99, tau=0.05, chkpt_dir='tmp/maddpg/'):
         self.agents = []
         self.n_agents = n_agents
         self.n_actions = n_actions
         chkpt_dir += scenario 
         for agent_idx in range(self.n_agents):
-            self.agents.append(Agent(
-                n_actions, n_agents, agent_idx,local_dim=local_dim, 
-                global_dim=global_dim, conv1_channel=conv1_channel, 
-                conv2_channel=conv2_channel, fc1_dims=fc1_dims, 
-                alpha=alpha, beta=beta, gamma=gamma, tau=tau,
-                chkpt_dir=chkpt_dir))
+            self.agents.append(Agent(n_actions, n_agents, agent_idx, local_dim,
+                                     conv1_channel, conv2_channel, fc1_dims, fc2_dims,
+                                     alpha, beta, gamma, tau, chkpt_dir))
 
     def save_checkpoint(self):
         print('... saving checkpoint ...')

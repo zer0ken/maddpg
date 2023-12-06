@@ -31,9 +31,10 @@ class GUI(tk.Frame):
         self.pack(side=tk.TOP, fill=tk.BOTH, expand=True, anchor='center')
                 
         self.main = main
-        self.n_row = main.env.n_row 
-        self.n_col = main.env.n_col
-        self.grid_ = Grid(self, self.n_row, self.n_col, env=main.env)
+        self.grid_ = Grid(self, env=MAACEnv.import_last_env())
+        
+        self.n_row = self.grid_.n_row 
+        self.n_col = self.grid_.n_col
         
         self._run_status = GUI.RunStatus.EDITTING_ENV
         
@@ -225,7 +226,6 @@ class GUI(tk.Frame):
     def _get_run_literal(self):
         return GUI._RUN_LITERAL[self._run_status]
     
-# TODO: implement auto save / load environment
 class Grid(tk.Frame):
     CELL_SIZE = 50
     MIN_MAP = 5
@@ -251,7 +251,7 @@ class Grid(tk.Frame):
         EventMode.BLOCKED: '실행 중'
     }
     
-    def __init__(self, master, n_row, n_col, env=None):
+    def __init__(self, master, n_row=10, n_col=10, env=None):
         tk.Frame.__init__(self, master)
         self.pack(side=tk.TOP, fill=tk.BOTH, expand=True, anchor='center', 
                           padx=5, pady=5)
