@@ -62,7 +62,7 @@ class MAACEnv:
         self.steps = 0
 
         for i, pos in enumerate(self.agent_pos):
-            agent = {'idx': i, 'home': pos, 'pos': pos, 'new_pos': pos}
+            agent = {'idx': i, 'home': pos, 'pos': pos, 'new_pos': pos, 'covered': 0}
             if keep_agent:
                 agent['pos'] = self.agents[i]['pos']
                 agent['new_pos'] = self.agents[i]['new_pos']
