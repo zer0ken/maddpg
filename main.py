@@ -5,6 +5,8 @@ from maddpg import MADDPG
 from buffer import PERMA, MultiAgentReplayBuffer
 from environment import MAACEnv
 import time
+import gc
+
 
 def obs_list_to_state_vector(observation):
     state = np.array([])
@@ -16,7 +18,7 @@ def obs_list_to_state_vector(observation):
 class Main:
     PRINT_INTERVAL = 100
     N_GAMES = 50000
-    MAX_STEPS = 2000
+    MAX_STEPS = 1000
     
     def __init__(self):
         self.env = MAACEnv.import_last_env()
@@ -27,12 +29,13 @@ class Main:
         self.evaluate = False
         self.load_chkpt = True
         self.force_render = False
-        self.learning_period = 50 # learn 1 batch per 50 steps
+        self.step_per_learn = 50 # learn 1 batch per 50 steps
+        self.episode_per_gc = 10 # collect garbage per 100 episodes
         
         # subroutine control (GUI is main thread)
         self.force_stop = False
         self.game_progress = 0
-        self.game_render_period = 50 # render 1 whole game per 100 games
+        self.episode_per_render = 50 # render 1 whole game per 100 games
         
     def prepare(self):
         scenario = '{}_agent_{}_by_{}'.format(self.env.n_agent, self.env.n_row, self.env.n_col)
@@ -57,8 +60,8 @@ class Main:
                                     chkpt_dir='.\\tmp\\maddpg\\')
 
         self.memory = PERMA(
-            1000, local_dim, global_dim, self.n_actions, self.n_agents, 
-            batch_size=512)
+            40000, local_dim, global_dim, self.n_actions, self.n_agents, 
+            batch_size=2048)
         
         print('preparation done')
     
@@ -99,7 +102,7 @@ class Main:
 
                 self.memory.store_transition(obs, actions, reward, obs_, done)
 
-                if self.total_steps % self.learning_period == 0 and not self.evaluate:
+                if self.total_steps % self.step_per_learn == 0 and not self.evaluate:
                     print('\tlearning...', self.total_steps)
                     self.maddpg_agents.learn(self.memory)
 
@@ -113,7 +116,7 @@ class Main:
                     print('force stop')
                     break
                 
-                if self.force_render or self.evaluate or i % self.game_render_period == 0:
+                if self.force_render or self.evaluate or i % self.episode_per_render == 0:
                     self.env.render(visual=True, episodes=self.game_progress, 
                                     fastest_solve=self.fastest_solve, **self.env.get_info())
                     if self.evaluate:
@@ -128,6 +131,10 @@ class Main:
                     
             if i % self.PRINT_INTERVAL == 0 and i > 0:
                 print('episode', i, 'average score {:.1f}'.format(avg_score))
+            
+            if i % self.episode_per_gc == 0 and i > 0:
+                print('collecting garbage...')
+                gc.collect()
                 
             self.env.render(episodes=self.game_progress, reset=True, 
                             fastest_solve=self.fastest_solve, **self.env.get_info())
