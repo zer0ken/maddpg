@@ -68,7 +68,8 @@ class Main:
             """ episode loop """
             
             self.game_progress = i
-            obs = self.env.reset(keep_agent=i != 0 and not self.evaluate)
+            # obs = self.env.reset(keep_agent=i != 0 and not self.evaluate)
+            obs = self.env.reset(keep_agent=False)
             score = 0
             done = [False]*self.n_agents
             episode_step = 0
