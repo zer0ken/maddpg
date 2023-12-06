@@ -52,7 +52,7 @@ class MAACEnv:
         """ GUI control """
         self.render_callback = None
 
-    def reset(self, keep_agent=False, local_dim=(5, 5)):
+    def reset(self, keep_agent=False):
         if not hasattr(self, 'agents'):
             self.agents = {}
         self.agent_layer = -np.ones((self.n_row, self.n_col))
@@ -85,10 +85,10 @@ class MAACEnv:
         
         obs_n = []
         for agent_idx in range(self.n_agent):
-            obs_n.append(self.get_observation(agent_idx, local_dim=local_dim))
+            obs_n.append(self.get_observation(agent_idx))
         return obs_n
 
-    def step(self, actions, local_dim=(5, 5)):
+    def step(self, actions):
         rewards = np.zeros((self.n_agent,))
         for i, action_prob in enumerate(actions):
             action = np.argmax(action_prob)
@@ -136,7 +136,7 @@ class MAACEnv:
                 else:
                     agent['covered'] += 1 
                 
-        observations = [self.get_observation(i, local_dim=local_dim) for i in range(self.n_agent)]
+        observations = [self.get_observation(i) for i in range(self.n_agent)]
         done = [False for i in range(self.n_agent)]
         info = self.get_info()
         
@@ -176,10 +176,10 @@ class MAACEnv:
             agent['new_pos'] = agent['pos']
 
     # 특정 에이전트의 local observation 반환
-    def get_observation(self, agent_idx, local_dim=(5, 5)):
+    def get_observation(self, agent_idx):
         pos = self.agents[agent_idx]['pos']
         
-        # 에이전트 주변 시야
+        # 장애물
         obstacle_layer = self.obstacle_layer
         
         # 에이전트 자신
@@ -195,24 +195,6 @@ class MAACEnv:
         # 청소해야할 곳
         dirty_layer = self.dirty_layer
         
-        def crop_with_pad(layer, center, pad=0):
-            shape = layer.shape
-            diff = [local_dim[0] // 2, local_dim[1] // 2]
-            shape = (shape[0]+diff[0]*2, shape[1]+diff[1]*2)
-            padded = np.zeros(shape)
-            if pad != 0:
-                padded += pad
-            padded[diff[0]:-diff[0], diff[1]:-diff[1]] = layer[:, :]
-            pos = (center[0] + diff[0], center[1] + diff[1])
-            crop = padded[pos[0] - diff[0] : pos[0] + diff[0] + 1, 
-                          pos[1] - diff[1] : pos[1] + diff[1] + 1]
-            return crop
-        
-        obstacle_layer = crop_with_pad(obstacle_layer, pos, pad=1)
-        agent_self_layer = crop_with_pad(agent_self_layer, pos, pad=0)
-        other_agent_layer = crop_with_pad(other_agent_layer, pos, pad=0)
-        dirty_layer = crop_with_pad(dirty_layer, pos, pad=0)
-                
         return Observation(obstacle_layer, agent_self_layer, other_agent_layer, dirty_layer)
         
     def get_info(self):

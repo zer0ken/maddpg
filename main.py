@@ -20,7 +20,6 @@ class Main:
         self.force_render = True
         self.step_per_learn = 50 # learn 1 batch per 50 steps
         self.episode_per_gc = 10 # collect garbage per 100 episodes
-        self.local_dim = (7, 7)
         
         # subroutine control (GUI is main thread)
         self.force_stop = False
@@ -69,8 +68,7 @@ class Main:
             """ episode loop """
             
             self.game_progress = i
-            obs = self.env.reset(keep_agent=i != 0 and not self.evaluate, 
-                                 local_dim=self.local_dim)
+            obs = self.env.reset(keep_agent=i != 0 and not self.evaluate)
             score = 0
             done = [False]*self.n_agents
             episode_step = 0
@@ -79,7 +77,7 @@ class Main:
                 """ step loop """
                 
                 actions = self.maddpg_agents.choose_action(obs, noise=None if self.evaluate else 0.2)
-                obs_, reward, done, info = self.env.step(actions, local_dim=self.local_dim)
+                obs_, reward, done, info = self.env.step(actions)
 
                 if all(done):
                     self.fastest_solve = min(self.fastest_solve, episode_step + 1)
