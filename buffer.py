@@ -10,19 +10,19 @@ class MultiAgentReplayBuffer:
         self.n_agents = n_agents
         self.batch_size = batch_size
 
-        self.obstacle_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]))
-        self.self_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]))
-        self.other_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]))
-        self.dirty_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]))
+        self.obstacle_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
+        self.self_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
+        self.other_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
+        self.dirty_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
         
-        self.new_obstacle_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]))
-        self.new_self_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]))
-        self.new_other_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]))
-        self.new_dirty_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]))
+        self.new_obstacle_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
+        self.new_self_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
+        self.new_other_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
+        self.new_dirty_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
         
-        self.reward_memory = np.zeros((self.mem_size, n_agents))
+        self.reward_memory = np.zeros((self.mem_size, n_agents), dtype=np.float32)
         self.terminal_memory = np.zeros((self.mem_size, n_agents), dtype=bool)
-        self.actor_action_memory = np.zeros((self.n_agents, self.mem_size, self.n_actions))
+        self.actor_action_memory = np.zeros((self.n_agents, self.mem_size, self.n_actions), dtype=np.float32)
         
 
     def store_transition(self, state, action, reward, 
@@ -89,19 +89,19 @@ class PERMA:
         self.min_reward = np.inf
         self.max_reward = -np.inf
 
-        self.obstacle_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]))
-        self.self_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]))
-        self.other_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]))
-        self.dirty_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]))
+        self.obstacle_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
+        self.self_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
+        self.other_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
+        self.dirty_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
         
-        self.new_obstacle_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]))
-        self.new_self_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]))
-        self.new_other_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]))
-        self.new_dirty_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]))
+        self.new_obstacle_memory = np.zeros((self.mem_size, n_agents, local_dim[0], local_dim[1]), dtype=np.float32)
+        self.new_self_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
+        self.new_other_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
+        self.new_dirty_memory = np.zeros((self.mem_size, n_agents, global_dim[0], global_dim[1]), dtype=np.float32)
         
-        self.reward_memory = np.zeros((self.mem_size, n_agents))
+        self.reward_memory = np.zeros((self.mem_size, n_agents), dtype=np.float32)
         self.terminal_memory = np.zeros((self.mem_size, n_agents), dtype=bool)
-        self.actor_action_memory = np.zeros((self.n_agents, self.mem_size, self.n_actions))
+        self.actor_action_memory = np.zeros((self.n_agents, self.mem_size, self.n_actions), dtype=np.float32)
 
     def store_transition(self, state, action, reward, state_, done):
         max_mem = min(self.mem_cntr, self.mem_size)
