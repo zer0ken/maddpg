@@ -24,7 +24,7 @@ class Agent:
 
         self.update_network_parameters(tau=1)
 
-    def choose_action(self, obstacle, self_, other, dirty):
+    def choose_action(self, obstacle, self_, other, dirty, noise=0.2):
         obstacle = obstacle.reshape((1, *obstacle.shape))
         self_ = self_.reshape((1, *self_.shape))
         other = other.reshape((1, *other.shape))
@@ -38,8 +38,9 @@ class Agent:
         dirty = T.tensor(dirty, dtype=T.float).to(device)
         
         actions = self.actor.forward(obstacle, self_, other, dirty)
-        noise = (T.rand(self.n_actions) * 0.5).to(device)
-        action = actions + noise
+        if noise is not None:
+            noise = (T.rand(self.n_actions) * noise).to(device)
+            action = actions + noise
 
         return action.detach().cpu().numpy()[0]
 

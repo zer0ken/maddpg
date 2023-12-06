@@ -2,23 +2,14 @@ import tkinter as tk
 import numpy as np
 from gui import GUI
 from maddpg import MADDPG
-from buffer import PERMA, MultiAgentReplayBuffer
-from environment import MAACEnv
-import time
+from buffer import PERMA
 import gc
-
-
-def obs_list_to_state_vector(observation):
-    state = np.array([])
-    for obs in observation:
-        state = np.concatenate([state, obs])
-    return state
 
 
 class Main:
     PRINT_INTERVAL = 100
     N_GAMES = 50000
-    MAX_STEPS = 1000
+    MAX_STEPS = 500
     
     def __init__(self):
         self.env = None # need to be set by GUI
@@ -26,9 +17,10 @@ class Main:
         # configs
         self.evaluate = False
         self.load_chkpt = True
-        self.force_render = False
+        self.force_render = True
         self.step_per_learn = 50 # learn 1 batch per 50 steps
         self.episode_per_gc = 10 # collect garbage per 100 episodes
+        self.local_dim = (7, 7)
         
         # subroutine control (GUI is main thread)
         self.force_stop = False
@@ -59,6 +51,9 @@ class Main:
             40000, input_dim, self.n_actions, self.n_agents, 
             batch_size=2048)
         
+        self.env.reset()
+        
+        self.force_stop = False
         
         print('preparation done')
     
@@ -74,7 +69,8 @@ class Main:
             """ episode loop """
             
             self.game_progress = i
-            obs = self.env.reset()
+            obs = self.env.reset(keep_agent=i != 0 and not self.evaluate, 
+                                 local_dim=self.local_dim)
             score = 0
             done = [False]*self.n_agents
             episode_step = 0
@@ -82,14 +78,8 @@ class Main:
             while not any(done):
                 """ step loop """
                 
-                # random actions
-                # actions = [np.array([np.random.rand() for _ in range(self.n_actions)]) for _ in range(self.n_agents)]
-                
-                actions = self.maddpg_agents.choose_action(obs)
-                obs_, reward, done, info = self.env.step(actions)
-                
-                state = obs
-                state_ = obs_
+                actions = self.maddpg_agents.choose_action(obs, noise=None if self.evaluate else 0.2)
+                obs_, reward, done, info = self.env.step(actions, local_dim=self.local_dim)
 
                 if all(done):
                     self.fastest_solve = min(self.fastest_solve, episode_step + 1)
@@ -116,8 +106,6 @@ class Main:
                 if self.force_render or self.evaluate or i % self.episode_per_render == 0:
                     self.env.render(visual=True, episodes=self.game_progress, 
                                     fastest_solve=self.fastest_solve, **self.env.get_info())
-                    # if self.evaluate:
-                    #     time.sleep(0.1) # to slow down the action for the video
             self.score_history.append(score)
             avg_score = np.mean(self.score_history[-100:])
             
@@ -138,11 +126,7 @@ class Main:
             
             if self.force_stop:
                 self.save_checkpoint()
-                self.force_stop = False
                 break
-            
-            
-        self.force_render = False
             
         print('thread finished')
 
