@@ -28,14 +28,14 @@ class MADDPG:
         for agent in self.agents:
             agent.load_models()
 
-    def choose_action(self, obs):
+    def choose_action(self, obs, noise=True):
         actions = {}
         
         def _choose_action(agent_idx, agent, obs_):
             agent_obs = obs_[agent_idx]
             action = agent.choose_action(
                 agent_obs.obstacle, agent_obs.self_,
-                agent_obs.other, agent_obs.dirty
+                agent_obs.other, agent_obs.dirty, noise=noise
             )
             actions[agent_idx] = action
             

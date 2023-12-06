@@ -19,7 +19,7 @@ class CriticNetwork(nn.Module):
                              + n_agents*n_actions,
                              fc1_dims)
         self.fc2 = nn.Linear(fc1_dims, fc2_dims)
-        self.q = nn.Linear(fc1_dims, 1)
+        self.q = nn.Linear(fc2_dims, 1)
 
         self.optimizer = optim.Adam(self.parameters(), lr=beta)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')

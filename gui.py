@@ -398,6 +398,9 @@ class Grid(tk.Frame):
         self._idx_to_agent = idx_to_agent
         self._pos_to_agent = pos_to_agent
         
+        for agent in self._pos_to_agent.values():
+            agent.original_pos = (agent.row, agent.col)
+        
         return MAACEnv(len(pos_to_agent), self.n_row, self.n_col, 
                        agent_pos=list(pos_to_agent.keys()), obstacle_pos=obstacle_pos, 
                        dirty_pos=dirty_pos)
@@ -526,12 +529,12 @@ class ColoredAgent:
         self.canvas = canvas
         self.row = row
         self.col = col
+        self.ogirinal_pos = (row, col)
         
-        self._original_pos = (row, col)
         self._oval = None
     
     def reset(self):
-        self.row, self.col = self._original_pos
+        self.row, self.col = self.ogirinal_pos
     
     def render(self, erase=False):
         if erase:

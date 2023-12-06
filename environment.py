@@ -15,7 +15,7 @@ class Observation:
 class MAACEnv:
     ACTIONS = {0: (-1, 0), 1: (0, 1), 2: (1, 0), 3: (0, -1), 4: (0, 0)}
 
-    def __init__(self, n_agent=3, n_row=10, n_col=10, visual_field=5,
+    def __init__(self, n_agent=3, n_row=10, n_col=10,
                  agent_pos=None, dirty_pos=None, obstacle_pos=None):
         self.n_row = max(5, n_row)
         self.n_col = max(5, n_col)
@@ -42,21 +42,19 @@ class MAACEnv:
                 self.agent_pos = list(map(tuple, indices[np.random.choice(
                     len(indices), self.n_agent, replace=False)]))
 
-        self.visual_field = visual_field
-        
         self.reset()
         self.dirty_layer[self.dirty_layer == self.obstacle_layer] = 0
         
         """ Gym Env variable """
         self.n = self.n_agent
-        self.observation_space = np.zeros((self.n_agent, 4, self.visual_field, self.visual_field))
         self.action_space = np.array([Discrete(5) for _ in range(self.n_agent)])
         
         """ GUI control """
         self.render_callback = None
 
-    def reset(self):
-        self.agents = {}
+    def reset(self, keep_agent=False, local_dim=(5, 5)):
+        if not hasattr(self, 'agents'):
+            self.agents = {}
         self.agent_layer = -np.ones((self.n_row, self.n_col))
         self.dirty_layer = np.zeros((self.n_row, self.n_col))
         self.visited_layer = -np.ones((self.n_row, self.n_col))
@@ -64,9 +62,13 @@ class MAACEnv:
         self.steps = 0
 
         for i, pos in enumerate(self.agent_pos):
-            self.agents[i] = {'idx': i, 'home': pos, 'pos': pos, 'new_pos': pos}
-            self.agent_layer[pos[0], pos[1]] = i
-            self.visited_layer[pos[0], pos[1]] = i
+            agent = {'idx': i, 'home': pos, 'pos': pos, 'new_pos': pos}
+            if keep_agent:
+                agent['pos'] = self.agents[i]['pos']
+                agent['new_pos'] = self.agents[i]['new_pos']
+            self.agents[i] = agent
+            self.agent_layer[agent['pos'][0], agent['pos'][1]] = i
+            self.visited_layer[agent['pos'][0], agent['pos'][1]] = i
 
         for pos in self.dirty_pos:
             if pos not in self.obstacle_pos:
@@ -83,10 +85,10 @@ class MAACEnv:
         
         obs_n = []
         for agent_idx in range(self.n_agent):
-            obs_n.append(self.get_observation(agent_idx))
+            obs_n.append(self.get_observation(agent_idx, local_dim=local_dim))
         return obs_n
 
-    def step(self, actions):
+    def step(self, actions, local_dim=(5, 5)):
         rewards = np.zeros((self.n_agent,))
         for i, action_prob in enumerate(actions):
             action = np.argmax(action_prob)
@@ -122,7 +124,8 @@ class MAACEnv:
             rewards[i] -= 0.5 #충돌한 애들끼리 +1
         
         for i, agent in self.agents.items():
-            self.visited_layer[agent['new_pos']] = i
+            if self.visited_layer[agent['new_pos']] == -1:
+                self.visited_layer[agent['new_pos']] = i
             
             if self.dirty_layer[agent['new_pos']] == 1: # 도착한 곳이 더러운 곳이라면 reward +1
                 self.dirty_layer[agent['new_pos']] = 0 # 도착한 곳은 청소 됨
@@ -133,7 +136,7 @@ class MAACEnv:
                 else:
                     agent['covered'] += 1 
                 
-        observations = [self.get_observation(i) for i in range(self.n_agent)]
+        observations = [self.get_observation(i, local_dim=local_dim) for i in range(self.n_agent)]
         done = [False for i in range(self.n_agent)]
         info = self.get_info()
         
@@ -173,7 +176,7 @@ class MAACEnv:
             agent['new_pos'] = agent['pos']
 
     # 특정 에이전트의 local observation 반환
-    def get_observation(self, agent_idx):
+    def get_observation(self, agent_idx, local_dim=(5, 5)):
         pos = self.agents[agent_idx]['pos']
         
         # 에이전트 주변 시야
@@ -194,15 +197,15 @@ class MAACEnv:
         
         def crop_with_pad(layer, center, pad=0):
             shape = layer.shape
-            diff = self.visual_field//2
-            shape = (shape[0]+diff*2, shape[1]+diff*2)
+            diff = [local_dim[0] // 2, local_dim[1] // 2]
+            shape = (shape[0]+diff[0]*2, shape[1]+diff[1]*2)
             padded = np.zeros(shape)
             if pad != 0:
                 padded += pad
-            padded[diff:-diff, diff:-diff] = layer[:, :]
-            pos = (center[0] + diff, center[1] + diff)
-            crop = padded[pos[0] - diff : pos[0] + diff + 1, 
-                          pos[1] - diff : pos[1] + diff + 1]
+            padded[diff[0]:-diff[0], diff[1]:-diff[1]] = layer[:, :]
+            pos = (center[0] + diff[0], center[1] + diff[1])
+            crop = padded[pos[0] - diff[0] : pos[0] + diff[0] + 1, 
+                          pos[1] - diff[1] : pos[1] + diff[1] + 1]
             return crop
         
         obstacle_layer = crop_with_pad(obstacle_layer, pos, pad=1)
