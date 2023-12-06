@@ -48,15 +48,15 @@ class Main:
         
         self.n_agents = self.env.n
         
-        local_dim = (self.env.visual_field, self.env.visual_field)
+        input_dim = (self.env.n_row, self.env.n_col)
 
         # action space is a list of arrays, assume each agent has same action space
         self.n_actions = self.env.action_space[0].n
-        self.maddpg_agents = MADDPG(self.n_agents, self.n_actions, local_dim=local_dim,
+        self.maddpg_agents = MADDPG(self.n_agents, self.n_actions, input_dim=input_dim,
                                     scenario=scenario, chkpt_dir='.\\tmp\\maddpg\\')
 
         self.memory = PERMA(
-            40000, local_dim, self.n_actions, self.n_agents, 
+            40000, input_dim, self.n_actions, self.n_agents, 
             batch_size=2048)
         
         

@@ -5,7 +5,7 @@ from agent import Agent
 from environment import Observation
 
 class MADDPG:
-    def __init__(self, n_agents, n_actions, local_dim=(3, 3), 
+    def __init__(self, n_agents, n_actions, input_dim=(10, 10), 
                  conv1_channel=16, conv2_channel=32, fc1_dims=32, fc2_dims=64,
                  scenario='simple', alpha=0.05, beta=0.02,
                  gamma=0.99, tau=0.05, chkpt_dir='tmp/maddpg/'):
@@ -14,7 +14,7 @@ class MADDPG:
         self.n_actions = n_actions
         chkpt_dir += scenario 
         for agent_idx in range(self.n_agents):
-            self.agents.append(Agent(n_actions, n_agents, agent_idx, local_dim,
+            self.agents.append(Agent(n_actions, n_agents, agent_idx, input_dim,
                                      conv1_channel, conv2_channel, fc1_dims, fc2_dims,
                                      alpha, beta, gamma, tau, chkpt_dir))
 

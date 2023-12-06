@@ -6,7 +6,7 @@ import torch.optim as optim
 import os
 
 class CriticNetwork(nn.Module):
-    def __init__(self, beta, local_dim, conv1_channel, conv2_channel, 
+    def __init__(self, beta, input_dim, conv1_channel, conv2_channel, 
                  fc1_dims, fc2_dims, n_agents, n_actions, chkpt_dir, name):
         super(CriticNetwork, self).__init__()
 
@@ -15,7 +15,7 @@ class CriticNetwork(nn.Module):
 
         self.conv1 = nn.Conv3d(4, conv1_channel, (1, 3, 3))  # [N, 4 layer, Agent, H, W] -> [N, 16 channel, Agent, H-2, W-2]
         self.conv2 = nn.Conv3d(conv1_channel, conv2_channel, (n_agents, 3, 3))   # [N, 16 channel, Agent, H-2, W-2] -> [N, 32 channel, 1, H-4, W-4]
-        self.fc1 = nn.Linear(conv2_channel*(local_dim[0]-4)*(local_dim[1]-4)
+        self.fc1 = nn.Linear(conv2_channel*(input_dim[0]-4)*(input_dim[1]-4)
                              + n_agents*n_actions,
                              fc1_dims)
         self.fc2 = nn.Linear(fc1_dims, fc2_dims)
@@ -48,7 +48,7 @@ class CriticNetwork(nn.Module):
 # TODO: pack obstacle layer into the conv layer input  
 
 class ActorNetwork(nn.Module):
-    def __init__(self, alpha, local_dim, conv1_channel, conv2_channel, 
+    def __init__(self, alpha, input_dim, conv1_channel, conv2_channel, 
                  fc1_dims, fc2_dims, n_actions, chkpt_dir, name):
         super(ActorNetwork, self).__init__()
 
@@ -57,7 +57,7 @@ class ActorNetwork(nn.Module):
 
         self.conv1 = nn.Conv2d(4, conv1_channel, 3)    # [3, H, W] -> [32, H-2, W-2]
         self.conv2 = nn.Conv2d(conv1_channel, conv2_channel, 3)   # [32, H-2, W-2] -> [64, H-4, W-4]
-        self.fc1 = nn.Linear(conv2_channel*(local_dim[0]-4)*(local_dim[1]-4), 
+        self.fc1 = nn.Linear(conv2_channel*(input_dim[0]-4)*(input_dim[1]-4), 
                              fc1_dims)
         self.fc2 = nn.Linear(fc1_dims, fc2_dims)
         self.pi = nn.Linear(fc2_dims, n_actions)
