@@ -44,12 +44,12 @@ class Main:
         # action space is a list of arrays, assume each agent has same action space
         self.n_actions = self.env.action_space[0].n
         self.maddpg_agents = MADDPG(self.n_agents, self.n_actions, input_dim=input_dim,
-                                    conv1_channel=32, conv2_channel=64, fc1_dims=128, fc2_dims=64,
+                                    conv1_channel=6, conv2_channel=9, fc1_dims=32, fc2_dims=64,
                                     scenario=scenario, chkpt_dir='.\\tmp\\maddpg\\')
 
         self.memory = PERMA(
             40000, input_dim, self.n_actions, self.n_agents, 
-            batch_size=2048)
+            batch_size=512)
         
         self.env.reset()
         
@@ -125,7 +125,8 @@ class Main:
                             fastest_solve=self.fastest_solve, **self.env.get_info())
             
             if self.force_stop:
-                self.save_checkpoint()
+                if not self.evaluate:
+                    self.save_checkpoint()
                 break
             
         print('thread finished')
