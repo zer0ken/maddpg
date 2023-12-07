@@ -40,9 +40,9 @@ class Agent:
         actions = self.actor.forward(obstacle, self_, other, dirty)
         if noise is not None:
             noise = (T.rand(self.n_actions) * noise).to(device)
-            action = actions + noise
+            actions = actions + noise
 
-        return action.detach().cpu().numpy()[0]
+        return actions.detach().cpu().numpy()[0]
 
     def update_network_parameters(self, tau=None):
         if tau is None:
