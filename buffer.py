@@ -144,8 +144,6 @@ class PERMA:
         probs = probs ** 0.6
         probs /= probs.sum()
         probs[-1] = 1.0 - probs[:-1].sum()
-        print(self.priorities[:max_mem])
-        print(probs)
         return probs
 
     def sample_buffer(self):
