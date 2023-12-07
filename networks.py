@@ -28,7 +28,7 @@ class CriticNetwork(nn.Module):
     def forward(self, obstacle, self_, other, dirty, action):
         state1 = T.stack([obstacle, self_, other, dirty], dim=1)
         x = F.relu(self.conv1(state1))
-        x = F.relu(self.conv2(x))
+        # x = F.relu(self.conv2(x))
         x = x.flatten(start_dim=1)
         
         state2 = action.flatten(start_dim=1)
@@ -69,7 +69,7 @@ class ActorNetwork(nn.Module):
     def forward(self, obstacle, self_, other, dirty):
         state1 = T.stack([obstacle, self_, other, dirty], dim=1)
         x = F.relu(self.conv1(state1))
-        x = F.relu(self.conv2(x))
+        # x = F.relu(self.conv2(x))
         x = x.flatten(start_dim=1)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))

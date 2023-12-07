@@ -83,7 +83,7 @@ class PERMA:
         self.batch_size = batch_size
         self.n_actions = n_actions
 
-        self.priorities = np.zeros(self.mem_size)
+        self.priorities = np.zeros(max_size)
         self.phi = 0.01 # soft mixing factor
         self.min_reward = np.inf
         self.max_reward = -np.inf
@@ -130,19 +130,22 @@ class PERMA:
                 
         self.mem_cntr += 1
 
-        self.priorities[index] = max(self.priorities[:max_mem], default=1.0)
-        
         reward = reward.sum()
         if reward < self.min_reward:
             self.min_reward = reward
         if reward > self.max_reward:
             self.max_reward = reward
+            
+        self.priorities[index] = reward
         
     def get_probabilities(self):
         max_mem = min(self.mem_cntr, self.mem_size)
-        probs = self.priorities[:max_mem] ** 0.6
+        probs = self.priorities[:max_mem] - self.min_reward
+        probs = probs ** 0.6
         probs /= probs.sum()
         probs[-1] = 1.0 - probs[:-1].sum()
+        print(self.priorities[:max_mem])
+        print(probs)
         return probs
 
     def sample_buffer(self):
@@ -151,23 +154,26 @@ class PERMA:
         sample_probs = self.get_probabilities()
         batch = np.random.choice(max_mem, self.batch_size, replace=False, p=sample_probs)
         
+        shuffled_agent = np.random.permutation(self.n_agents)
+        shuffled_batch = np.ix_(batch, shuffled_agent)
+        
         obstacles = self.obstacle_memory[batch]
-        selves = self.self_memory[batch]
-        others = self.other_memory[batch]
+        selves = self.self_memory[batch][:, shuffled_agent]
+        others = self.other_memory[batch][:, shuffled_agent]
         dirties = self.dirty_memory[batch]
 
         new_obstacles = self.new_obstacle_memory[batch]
-        new_selves = self.new_self_memory[batch]
-        new_others = self.new_other_memory[batch]
+        new_selves = self.new_self_memory[batch][:, shuffled_agent]
+        new_others = self.new_other_memory[batch][:, shuffled_agent]
         new_dirties = self.new_dirty_memory[batch]
         
-        rewards = self.reward_memory[batch]
+        rewards = self.reward_memory[batch][:, shuffled_agent]
         terminal = self.terminal_memory[batch]
-        actions = self.actor_action_memory[:, batch, :]
+        actions = self.actor_action_memory[shuffled_agent][:, batch]
         
-        sum_rewards = rewards.sum(axis=1)
-        new_priorities = (sum_rewards - self.min_reward) / (self.max_reward - self.min_reward)
-        self.priorities[batch] = self.phi * new_priorities + (1 - self.phi) * self.priorities[batch]
+        # sum_rewards = rewards.sum(axis=1)
+        # # new_priorities = (sum_rewards - self.min_reward) / (self.max_reward - self.min_reward)
+        # self.priorities[batch] = self.phi * new_priorities + (1 - self.phi) * self.priorities[batch]
 
         return obstacles, selves, others, dirties, \
             actions, rewards, \

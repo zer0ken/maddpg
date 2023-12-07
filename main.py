@@ -123,7 +123,8 @@ class Main:
                             fastest_solve=self.fastest_solve, **self.env.get_info())
             
             if self.force_stop:
-                self.save_checkpoint()
+                if not self.evaluate:
+                    self.save_checkpoint()
                 break
             
         print('thread finished')

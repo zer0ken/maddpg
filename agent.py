@@ -1,3 +1,4 @@
+import numpy as np
 import torch as T
 from networks import ActorNetwork, CriticNetwork
 
@@ -41,7 +42,6 @@ class Agent:
         if noise is not None:
             noise = (T.rand(self.n_actions) * noise).to(device)
             actions = actions + noise
-
         return actions.detach().cpu().numpy()[0]
 
     def update_network_parameters(self, tau=None):
