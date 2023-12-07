@@ -9,7 +9,7 @@ import gc
 class Main:
     PRINT_INTERVAL = 100
     N_GAMES = 50000
-    MAX_STEPS = 500
+    MAX_STEPS = 600
     
     def __init__(self):
         self.env = None # need to be set by GUI
@@ -17,7 +17,7 @@ class Main:
         # configs
         self.evaluate = False
         self.load_chkpt = True
-        self.force_render = True
+        self.force_render = False
         self.step_per_learn = 50 # learn 1 batch per 50 steps
         self.episode_per_gc = 10 # collect garbage per 100 episodes
         
@@ -44,6 +44,7 @@ class Main:
         # action space is a list of arrays, assume each agent has same action space
         self.n_actions = self.env.action_space[0].n
         self.maddpg_agents = MADDPG(self.n_agents, self.n_actions, input_dim=input_dim,
+                                    conv1_channel=32, conv2_channel=64, fc1_dims=128, fc2_dims=64,
                                     scenario=scenario, chkpt_dir='.\\tmp\\maddpg\\')
 
         self.memory = PERMA(
@@ -77,7 +78,7 @@ class Main:
             while not any(done):
                 """ step loop """
                 
-                actions = self.maddpg_agents.choose_action(obs, noise=None if self.evaluate else 0.2)
+                actions = self.maddpg_agents.choose_action(obs, noise=None if self.evaluate else 0.35)
                 obs_, reward, done, info = self.env.step(actions)
 
                 if all(done):
