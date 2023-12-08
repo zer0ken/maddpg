@@ -28,7 +28,7 @@ class Agent:
         state = T.tensor(observation.reshape(), dtype=T.float).to(self.actor.device)
         actions = self.actor.forward(state)
         noise = (T.rand(self.n_actions) * 0.5).to(self.actor.device)
-        action = actions + noise
+        actions = actions + noise
 
         return actions.detach().cpu().numpy()[0]
 
