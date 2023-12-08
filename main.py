@@ -17,7 +17,7 @@ class Main:
         # configs
         self.evaluate = False
         self.load_chkpt = True
-        self.force_render = True
+        self.force_render = False
         self.step_per_learn = 50 # learn 1 batch per 50 steps
         self.episode_per_gc = 10 # collect garbage per 100 episodes
         

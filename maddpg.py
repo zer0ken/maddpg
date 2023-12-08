@@ -2,7 +2,6 @@ from threading import Thread
 import torch as T
 import torch.nn.functional as F
 from agent import Agent
-from environment import Observation
 
 class MADDPG:
     def __init__(self, n_agents, n_actions, input_dim=(10, 10), 
