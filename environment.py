@@ -47,7 +47,7 @@ class MAACEnv:
         
         """ Gym Env variable """
         self.n = self.n_agent
-        self.action_space = np.array([Discrete(5) for _ in range(self.n_agent)])
+        self.action_space = np.array([Discrete(4) for _ in range(self.n_agent)])
         
         """ GUI control """
         self.render_callback = None

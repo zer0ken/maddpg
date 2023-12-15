@@ -2,7 +2,7 @@ import tkinter as tk
 import numpy as np
 from gui import GUI
 from maddpg import MADDPG
-from buffer import PERMA
+from buffer import PERMA, MultiAgentReplayBuffer
 import gc
 
 
@@ -46,7 +46,7 @@ class Main:
         self.maddpg_agents = MADDPG(self.n_agents, self.n_actions, input_dim=input_dim,
                                     scenario=scenario, chkpt_dir='.\\tmp\\maddpg\\')
 
-        self.memory = PERMA(
+        self.memory = MultiAgentReplayBuffer(
             40000, input_dim, self.n_actions, self.n_agents, 
             batch_size=2048)
         
@@ -76,8 +76,12 @@ class Main:
                         
             while not any(done):
                 """ step loop """
-                
-                actions = self.maddpg_agents.choose_action(obs, noise=None if self.evaluate else 0.2)
+                noise = 0.2
+                if self.evaluate:
+                    noise = None
+                elif self.memory.ready():
+                    noise = 0.1
+                actions = self.maddpg_agents.choose_action(obs, noise=noise)
                 obs_, reward, done, info = self.env.step(actions)
 
                 if all(done):

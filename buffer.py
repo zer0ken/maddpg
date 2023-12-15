@@ -130,13 +130,12 @@ class PERMA:
                 
         self.mem_cntr += 1
 
-        self.priorities[index] = max(self.priorities[:max_mem], default=1.0)
-        
         reward = reward.sum()
         if reward < self.min_reward:
             self.min_reward = reward
         if reward > self.max_reward:
             self.max_reward = reward
+        self.priorities[index] = reward
         
     def get_probabilities(self):
         max_mem = min(self.mem_cntr, self.mem_size)
