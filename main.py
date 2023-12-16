@@ -44,11 +44,12 @@ class Main:
         # action space is a list of arrays, assume each agent has same action space
         self.n_actions = self.env.action_space[0].n
         self.maddpg_agents = MADDPG(self.n_agents, self.n_actions, input_dim=input_dim,
+                                    alpha=0.01, beta=0.01, gamma=0.99, tau=0.1,
                                     scenario=scenario, chkpt_dir='.\\tmp\\maddpg\\')
 
         self.memory = MultiAgentReplayBuffer(
             40000, input_dim, self.n_actions, self.n_agents, 
-            batch_size=2048)
+            batch_size=256)
         
         self.env.reset()
         
@@ -76,11 +77,11 @@ class Main:
                         
             while not any(done):
                 """ step loop """
-                noise = 0.2
+                noise = 0.3
                 if self.evaluate:
                     noise = None
                 elif self.memory.ready():
-                    noise = 0.1
+                    noise = 0.15
                 actions = self.maddpg_agents.choose_action(obs, noise=noise)
                 obs_, reward, done, info = self.env.step(actions)
 
@@ -110,7 +111,8 @@ class Main:
                     self.env.render(visual=True, episodes=self.game_progress, 
                                     fastest_solve=self.fastest_solve, **self.env.get_info())
             self.score_history.append(score)
-            avg_score = np.mean(self.score_history[-100:])
+            self.score_history = self.score_history[-100:]
+            avg_score = np.mean(self.score_history)
             
             if not self.evaluate:
                 if avg_score > self.best_score:

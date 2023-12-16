@@ -2,10 +2,10 @@ from threading import Thread
 import torch as T
 import torch.nn.functional as F
 from agent import Agent
+from torchviz import make_dot
 
 T.autograd.set_detect_anomaly(True)
 T.set_default_dtype(T.float32)
-
 
 class MADDPG:
     def __init__(self, n_agents, n_actions, input_dim=(10, 10), 
@@ -15,7 +15,7 @@ class MADDPG:
         self.agents = []
         self.n_agents = n_agents
         self.n_actions = n_actions
-        chkpt_dir += scenario 
+        chkpt_dir += scenario
         for agent_idx in range(self.n_agents):
             self.agents.append(Agent(n_actions, n_agents, agent_idx, input_dim,
                                      conv1_channel, conv2_channel, fc1_dims, fc2_dims,
@@ -34,16 +34,14 @@ class MADDPG:
     def choose_action(self, obs, noise=True):
         actions = {}
         
-        def _choose_action(agent_idx, agent, obs_):
-            agent_obs = obs_[agent_idx]
+        for agent_idx, agent in enumerate(self.agents):
+            agent_obs = obs[agent_idx]
             action = agent.choose_action(
                 agent_obs.obstacle, agent_obs.self_,
                 agent_obs.other, agent_obs.dirty, noise=noise
             )
             actions[agent_idx] = action
             
-        for agent_idx, agent in enumerate(self.agents):
-            _choose_action(agent_idx, agent, obs)
         actions = [actions[i] for i in range(self.n_agents)]
         return actions
 
@@ -76,7 +74,7 @@ class MADDPG:
         all_agents_new_mu_actions = {}
         old_agents_actions = {}
         
-        def _get(agent_idx, agent):
+        for agent_idx, agent in enumerate(self.agents):
             new_obstacles_ = new_obstacles[:, agent_idx].to(device)
             new_selves_ = new_selves[:, agent_idx].to(device)
             new_others_ = new_others[:, agent_idx].to(device)
@@ -94,9 +92,6 @@ class MADDPG:
             
             all_agents_new_mu_actions[agent_idx] = pi
             old_agents_actions[agent_idx] = actions[agent_idx]
-
-        for agent_idx, agent in enumerate(self.agents):
-            _get(agent_idx, agent)
             
         all_agents_new_actions = [all_agents_new_actions[i] for i in range(self.n_agents)]
         all_agents_new_mu_actions = [all_agents_new_mu_actions[i] for i in range(self.n_agents)]
@@ -106,29 +101,62 @@ class MADDPG:
         mu = T.cat([acts for acts in all_agents_new_mu_actions], dim=1)
         old_actions = T.cat([acts for acts in old_agents_actions],dim=1)
 
-        def _learn(agent_idx, agent):
+        for agent_idx, agent in enumerate(self.agents):
             critic_value_ = agent.target_critic.forward(
-                new_obstacles, new_selves, new_others, new_dirties, new_actions).flatten()
+                new_obstacles.detach().clone(), 
+                new_selves.detach().clone(), 
+                new_others.detach().clone(), 
+                new_dirties.detach().clone(), 
+                new_actions.detach().clone()).flatten().detach().clone()
             critic_value_[dones[:,0]] = 0.0
             critic_value = agent.critic.forward(
-                obstacles, selves, others, dirties, old_actions).flatten()
+                obstacles.detach().clone(), 
+                selves.detach().clone(), 
+                others.detach().clone(), 
+                dirties.detach().clone(), 
+                old_actions.detach().clone()).flatten()
 
             target = rewards[:,agent_idx] + agent.gamma*critic_value_
             critic_loss = F.mse_loss(target, critic_value)
+            
             agent.critic.optimizer.zero_grad()
             critic_loss.backward(retain_graph=True)
+            
             agent.critic.optimizer.step()
 
             actor_loss = agent.critic.forward(
-                obstacles, selves, others, dirties, mu).flatten()
+                obstacles.detach().clone(), 
+                selves.detach().clone(),
+                others.detach().clone(),
+                dirties.detach().clone(),
+                mu).flatten()
             actor_loss = -T.mean(actor_loss)
+            
+            agent.critic.requires_grad_(False)
             agent.actor.optimizer.zero_grad()
             actor_loss.backward(retain_graph=True)
-
-            agent.update_network_parameters()
             
-            print(agent_idx, 'actor_loss:', actor_loss.item())
             print(agent_idx, 'critic_loss:', critic_loss.item())
+            print(agent_idx, 'actor_loss:', actor_loss.item())
             
         for agent_idx, agent in enumerate(self.agents):
-            _learn(agent_idx, agent)
+            
+            with T.no_grad():
+                mu_obstacles_ = obstacles[:, agent_idx].to(device)
+                mu_selves_ = selves[:, agent_idx].to(device)
+                mu_others_ = others[:, agent_idx].to(device)
+                mu_dirties_ = dirties[:, agent_idx].to(device)
+                
+                pi = agent.actor.forward(mu_obstacles_, mu_selves_, mu_others_, mu_dirties_)
+            
+            print(agent_idx, 'pi:', pi)
+            agent.actor.optimizer.step()
+            
+            with T.no_grad():
+                pi = agent.actor.forward(mu_obstacles_, mu_selves_, mu_others_, mu_dirties_)
+            print(agent_idx, '>>>', pi)
+            agent.update_network_parameters()
+            
+        for agent_idx, agent in enumerate(self.agents):
+            agent.critic.requires_grad_(True)
+            

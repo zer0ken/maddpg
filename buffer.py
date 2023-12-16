@@ -84,7 +84,6 @@ class PERMA:
         self.n_actions = n_actions
 
         self.priorities = np.zeros(self.mem_size)
-        self.phi = 0.01 # soft mixing factor
         self.min_reward = np.inf
         self.max_reward = -np.inf
 
@@ -108,9 +107,8 @@ class PERMA:
             index = max_mem
         else:
             probs = self.get_probabilities()
-            neg_porbs = np.ones_like(probs) - probs
-            neg_porbs /= neg_porbs.sum()
-            neg_porbs[-1] = 1.0 - neg_porbs[:-1].sum()
+            neg_probs = np.zeros_like(probs) - probs
+            
             index = np.random.choice(self.mem_size, 1, replace=False, p=neg_porbs)[0]
 
         for i in range(self.n_agents):
@@ -139,9 +137,11 @@ class PERMA:
         
     def get_probabilities(self):
         max_mem = min(self.mem_cntr, self.mem_size)
-        probs = self.priorities[:max_mem] ** 0.6
+        probs = self.priorities[:max_mem]
+        probs -= probs.min()
         probs /= probs.sum()
         probs[-1] = 1.0 - probs[:-1].sum()
+        print('probs:', probs)
         return probs
 
     def sample_buffer(self):
