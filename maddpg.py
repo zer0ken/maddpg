@@ -29,17 +29,9 @@ class MADDPG:
     def choose_action(self, raw_obs):
         actions = {}
         
-        def _choose_action(agent_idx, agent, raw_obs):
+        for agent_idx, agent in enumerate(self.agents):
             action = agent.choose_action(raw_obs[agent_idx])
             actions[agent_idx] = action
-            
-        threads = []
-        for agent_idx, agent in enumerate(self.agents):
-            thread = Thread(target=_choose_action, args=(agent_idx, agent, raw_obs), daemon=True)
-            thread.start()
-            threads.append(thread)
-        for thread in threads:
-            thread.join()
             
         actions = [actions[i] for i in range(self.n_agents)]
         return actions
@@ -53,7 +45,7 @@ class MADDPG:
 
         device = self.agents[0].actor.device
 
-        states = T.tensor(states, dtype=T.float32).to(device).clone().detach()
+        states = T.tensor(states, dtype=T.float32).to(device)
         actions = T.tensor(actions, dtype=T.float32).to(device)
         rewards = T.tensor(rewards).to(device)
         states_ = T.tensor(states_, dtype=T.float32).to(device)
@@ -63,7 +55,7 @@ class MADDPG:
         all_agents_new_mu_actions = {}
         old_agents_actions = {}
         
-        def _get(agent_idx, agent):
+        for agent_idx, agent in enumerate(self.agents):
             new_states = T.tensor(actor_new_states[agent_idx], 
                                  dtype=T.float32).to(device)
             new_pi = agent.target_actor.forward(new_states)
@@ -76,25 +68,20 @@ class MADDPG:
             all_agents_new_mu_actions[agent_idx] = pi
             old_agents_actions[agent_idx] = actions[agent_idx]
 
-        threads = []
-        for agent_idx, agent in enumerate(self.agents):
-            thread = Thread(target=_get, args=(agent_idx, agent), daemon=True)
-            thread.start()
-            threads.append(thread)
-        for thread in threads:
-            thread.join()
         all_agents_new_actions = [all_agents_new_actions[i] for i in range(self.n_agents)]
         all_agents_new_mu_actions = [all_agents_new_mu_actions[i] for i in range(self.n_agents)]
         old_agents_actions = [old_agents_actions[i] for i in range(self.n_agents)]
 
         new_actions = T.cat([acts for acts in all_agents_new_actions], dim=1)
-        mu = T.cat([acts for acts in all_agents_new_mu_actions], dim=1).clone().detach()
+        mu = T.cat([acts for acts in all_agents_new_mu_actions], dim=1)
         old_actions = T.cat([acts for acts in old_agents_actions],dim=1)
 
-        def _learn(agent_idx, agent):
-            critic_value_ = agent.target_critic.forward(states_, new_actions).flatten()
+        for agent_idx, agent in enumerate(self.agents):
+            critic_value_ = agent.target_critic.forward(states_.detach().clone(), 
+                                                        new_actions.detach().clone()).flatten()
             critic_value_[dones[:,0]] = 0.0
-            critic_value = agent.critic.forward(states, old_actions).flatten()
+            critic_value = agent.critic.forward(states.detach().clone(), 
+                                                old_actions.detach().clone()).flatten()
 
             target = rewards[:,agent_idx] + agent.gamma*critic_value_.clone().detach()
             critic_loss = F.mse_loss(target.to(T.float32), critic_value.to(T.float32))
@@ -104,16 +91,26 @@ class MADDPG:
 
             actor_loss = agent.critic.forward(states, mu).flatten()
             actor_loss = -T.mean(actor_loss)
+
+            agent.critic.requires_grad_(False)
             agent.actor.optimizer.zero_grad()
             actor_loss.backward(retain_graph=True)
+        
+        for agent_idx, agent in enumerate(self.agents):
+            with T.no_grad():
+                mu_states = T.tensor(actor_states[agent_idx], 
+                                    dtype=T.float32).to(device)
+                pi = agent.actor.forward(mu_states)
+            print(agent_idx, 'pi:', pi)
+            
             agent.actor.optimizer.step()
-
+            
+            with T.no_grad():
+                pi = agent.actor.forward(mu_states)
+            print(agent_idx, '>>>', pi)
+            
             agent.update_network_parameters()
             
-        threads = []
         for agent_idx, agent in enumerate(self.agents):
-            thread = Thread(target=_learn, args=(agent_idx, agent), daemon=True)
-            thread.start()
-            threads.append(thread)
-        for thread in threads:
-            thread.join()
+            agent.critic.requires_grad_(True)
+            
