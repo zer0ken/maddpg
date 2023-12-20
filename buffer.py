@@ -1,5 +1,4 @@
 import numpy as np
-import torch as T
 
 class MultiAgentReplayBuffer:
     def __init__(self, max_size, local_dim, n_actions, n_agents, batch_size):

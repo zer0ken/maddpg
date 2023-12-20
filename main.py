@@ -1,8 +1,9 @@
 import tkinter as tk
 import numpy as np
+import torch as T
 from gui import GUI
 from maddpg import MADDPG
-from buffer import PERMA, MultiAgentReplayBuffer
+from buffer import MultiAgentReplayBuffer
 import gc
 
 
@@ -18,13 +19,14 @@ class Main:
         self.evaluate = False
         self.load_chkpt = True
         self.force_render = False
-        self.step_per_learn = 50 # learn 1 batch per 50 steps
+        self.step_per_learn = 128 # learn 1 batch per 50 steps
         self.episode_per_gc = 10 # collect garbage per 100 episodes
         
         # subroutine control (GUI is main thread)
         self.force_stop = False
         self.game_progress = 0
         self.episode_per_render = 50 # render 1 whole game per 100 games
+        
         
     def prepare(self):
         scenario = '{}_agent_{}_by_{}'.format(self.env.n_agent, self.env.n_row, self.env.n_col)
@@ -44,12 +46,12 @@ class Main:
         # action space is a list of arrays, assume each agent has same action space
         self.n_actions = self.env.action_space[0].n
         self.maddpg_agents = MADDPG(self.n_agents, self.n_actions, input_dim=input_dim,
-                                    alpha=0.01, beta=0.01, gamma=0.99, tau=0.1,
+                                    alpha=0.001, beta=0.001, gamma=1.0, tau=0.01,
                                     scenario=scenario, chkpt_dir='.\\tmp\\maddpg\\')
 
         self.memory = MultiAgentReplayBuffer(
             40000, input_dim, self.n_actions, self.n_agents, 
-            batch_size=256)
+            batch_size=64)
         
         self.env.reset()
         
@@ -139,6 +141,11 @@ class Main:
         self.maddpg_agents.save_checkpoint()
 
 if __name__ == '__main__':
+
+    T.autograd.set_detect_anomaly(True)
+    T.set_default_dtype(T.float32)
+    T.set_default_device('cuda:0' if T.cuda.is_available() else 'cpu')
+
     root = tk.Tk()
     main = Main()
     gui = GUI(root, main)

@@ -1,15 +1,10 @@
-from threading import Thread
 import torch as T
 import torch.nn.functional as F
 from agent import Agent
-from torchviz import make_dot
-
-T.autograd.set_detect_anomaly(True)
-T.set_default_dtype(T.float32)
 
 class MADDPG:
     def __init__(self, n_agents, n_actions, input_dim=(10, 10), 
-                 conv1_channel=16, conv2_channel=32, fc1_dims=32, fc2_dims=64,
+                 conv1_channel=64, conv2_channel=128, conv3_channel=256, fc1_dims=256, fc2_dims=512, fc3_dims=256,
                  scenario='simple', alpha=0.05, beta=0.02,
                  gamma=0.99, tau=0.05, chkpt_dir='tmp/maddpg/'):
         self.agents = []
@@ -18,7 +13,8 @@ class MADDPG:
         chkpt_dir += scenario
         for agent_idx in range(self.n_agents):
             self.agents.append(Agent(n_actions, n_agents, agent_idx, input_dim,
-                                     conv1_channel, conv2_channel, fc1_dims, fc2_dims,
+                                     conv1_channel, conv2_channel, conv3_channel, 
+                                     fc1_dims, fc2_dims, fc3_dims,
                                      alpha, beta, gamma, tau, chkpt_dir))
 
     def save_checkpoint(self):
@@ -31,7 +27,7 @@ class MADDPG:
         for agent in self.agents:
             agent.load_models()
 
-    def choose_action(self, obs, noise=True):
+    def choose_action(self, obs, noise=0.2):
         actions = {}
         
         for agent_idx, agent in enumerate(self.agents):
